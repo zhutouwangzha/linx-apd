@@ -6,14 +6,18 @@ SRCDIR = .
 INCDIR = include
 OBJDIR = obj
 
-# 源文件
-SRCS = $(wildcard $(SRCDIR)/*.c)
+# 源文件（排除测试文件）
+SRCS = $(filter-out test_%.c, $(wildcard $(SRCDIR)/*.c))
 OBJS = $(SRCS:$(SRCDIR)/%.c=$(OBJDIR)/%.o)
 
 # 目标库
 TARGET = liblinx_rule_output.a
 
-.PHONY: all clean
+# 测试程序
+TEST_SRCS = $(wildcard test_*.c)
+TEST_TARGETS = $(TEST_SRCS:%.c=%)
+
+.PHONY: all clean test
 
 all: $(TARGET)
 
@@ -26,8 +30,15 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c | $(OBJDIR)
 $(OBJDIR):
 	mkdir -p $(OBJDIR)
 
+# 编译测试程序
+test_%: test_%.c $(TARGET)
+	$(CC) $(CFLAGS) $(INCLUDES) $< -L. -llinx_rule_output -o $@
+
+test: test_efficient_output
+	./test_efficient_output
+
 clean:
-	rm -rf $(OBJDIR) $(TARGET)
+	rm -rf $(OBJDIR) $(TARGET) $(TEST_TARGETS)
 
 install: $(TARGET)
 	@echo "Installing $(TARGET)"
