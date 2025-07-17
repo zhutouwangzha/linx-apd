@@ -4,14 +4,15 @@ INCLUDES = -I.
 LIBS = 
 
 # 源文件
-SOURCES = field_mapper.c example.c rule_engine_example.c test_field_mapper.c
+SOURCES = field_mapper.c example.c rule_engine_example.c test_field_mapper.c new_example.c
 OBJECTS = $(SOURCES:.c=.o)
 TARGET = field_mapper_example
 RULE_TARGET = rule_engine_example
 TEST_TARGET = test_field_mapper
+NEW_TARGET = new_example
 
 # 默认目标
-all: $(TARGET) $(RULE_TARGET) $(TEST_TARGET)
+all: $(TARGET) $(RULE_TARGET) $(TEST_TARGET) $(NEW_TARGET)
 
 # 编译可执行文件
 $(TARGET): field_mapper.o example.o
@@ -23,13 +24,16 @@ $(RULE_TARGET): field_mapper.o rule_engine_example.o
 $(TEST_TARGET): field_mapper.o test_field_mapper.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
 
+$(NEW_TARGET): field_mapper.o new_example.o
+	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
+
 # 编译对象文件
 %.o: %.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 # 清理
 clean:
-	rm -f $(OBJECTS) $(TARGET) $(RULE_TARGET) $(TEST_TARGET)
+	rm -f $(OBJECTS) $(TARGET) $(RULE_TARGET) $(TEST_TARGET) $(NEW_TARGET)
 
 # 运行示例
 run: $(TARGET)
@@ -42,6 +46,10 @@ run-rules: $(RULE_TARGET)
 # 运行测试
 test: $(TEST_TARGET)
 	./$(TEST_TARGET)
+
+# 运行新示例
+run-new: $(NEW_TARGET)
+	./$(NEW_TARGET)
 
 # 安装uthash（如果需要）
 install-uthash:
@@ -60,5 +68,6 @@ field_mapper.o: field_mapper.c field_mapper.h uthash.h
 example.o: example.c field_mapper.h
 rule_engine_example.o: rule_engine_example.c field_mapper.h
 test_field_mapper.o: test_field_mapper.c field_mapper.h
+new_example.o: new_example.c field_mapper.h
 
-.PHONY: all clean run run-rules test install-uthash
+.PHONY: all clean run run-rules test run-new install-uthash
