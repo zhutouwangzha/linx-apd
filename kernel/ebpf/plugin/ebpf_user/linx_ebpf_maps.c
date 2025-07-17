@@ -1,0 +1,153 @@
+#include <unistd.h>
+
+#include "linx_ebpf_common.h"
+#include "linx_ebpf_api.h"
+#include "linx_syscall_table.h"
+#include "linx_common.h"
+
+#include "plugin_config.h"
+
+int linx_ebpf_maps_before_load(linx_ebpf_t *bpf_manager)
+{
+    long ncpu = sysconf(_SC_NPROCESSORS_ONLN);
+    if (ncpu == -1) {
+        LINX_LOG_ERROR("Failed to get the number of system cores!");
+        return -1;
+    }
+
+	if(bpf_map__set_max_entries(bpf_manager->skel->maps.linx_ringbuf_maps, ncpu)) {
+		LINX_LOG_ERROR("unable to set max entries(%d) for 'linx_ringbuf_maps'!",
+                       ncpu);
+		return -1;
+	}
+
+    return 0;
+}
+
+void linx_ebpf_set_boot_time(struct linx_bpf *skel, uint64_t boot_time)
+{
+    skel->bss->g_boot_time = boot_time;
+}
+
+void linx_ebpf_set_filter_pids(struct linx_bpf *skel)
+{
+    for (int i = 0; 
+         i < LINX_BPF_FILTER_PID_MAX_SIZE &&
+         g_plugin_config.open_config.filter_pids[i]; 
+         ++i)
+    {
+        skel->bss->g_filter_pids[i] = g_plugin_config.open_config.filter_pids[i];
+    }
+}
+
+void linx_ebpf_set_filter_comms(struct linx_bpf *skel)
+{
+    size_t byte_write = 0, buf_size = LINX_COMM_MAX_SIZE;
+
+    for (int i = 0;
+         i < LINX_BPF_FILTER_COMM_MAX_SIZE &&
+         g_plugin_config.open_config.filter_comms[i][0] != 0;
+         ++i)
+    {
+        if (LINX_SNPRINTF(byte_write, 
+                          (char *)skel->bss->g_filter_comms[i],
+                          buf_size, 
+                          "%s",
+                          (char *)g_plugin_config.open_config.filter_comms[i]) < 0)
+        {
+
+            LINX_LOG_WARNING("Failed when copy %d bytes '%s' str to %lu bytes buf for %d time!", 
+                             strlen((char *)g_plugin_config.open_config.filter_comms[i]), 
+                             (char *)g_plugin_config.open_config.filter_comms[i], 
+                             buf_size, 
+                             i);
+        }
+    }
+}
+
+void linx_ebpf_set_drop_mode(struct linx_bpf *skel, uint8_t value)
+{
+    skel->bss->g_drop_mode = value;
+}
+
+void linx_ebpf_set_drop_failed(struct linx_bpf *skel, uint8_t value)
+{
+    skel->bss->g_drop_failed = value;
+}
+
+void linx_ebpf_set_interesting_syscalls_table(struct linx_bpf *skel)
+{
+    for (int i = 0; i < LINX_SYSCALL_MAX_IDX; ++i) {
+        skel->bss->g_interesting_syscalls_table[i] =
+            g_plugin_config.open_config.interest_syscall_table[i];
+    }
+}
+
+static int linx_ebpf_add_prog_to_tail_table(struct linx_bpf *skel, int tail_tabld_fd,
+                                            const char *prog_name, int key)
+{
+    struct bpf_program *bpf_prog = NULL;
+    int bpf_prog_fd = 0;
+
+    bpf_prog = bpf_object__find_program_by_name(skel->obj, prog_name);
+    if (!bpf_prog) {
+        LINX_LOG_WARNING("unable to find BPF program '%s'!", prog_name);
+        return 0;
+    }
+
+    bpf_prog_fd = bpf_program__fd(bpf_prog);
+    if (bpf_prog_fd <= 0) {
+        LINX_LOG_ERROR("unable to get the fd for BPF program '%s'!", prog_name);
+        goto clean_add_prog_to_tail_table;
+    }
+
+    if (bpf_map_update_elem(tail_tabld_fd, &key, &bpf_prog_fd, BPF_ANY)) {
+        LINX_LOG_ERROR("unable to update the tail table with BPF program '%s'!", prog_name);
+        goto clean_add_prog_to_tail_table;
+    }
+    return 0;
+
+clean_add_prog_to_tail_table:
+    close(bpf_prog_fd);
+    return -1;
+}
+
+int linx_ebpf_load_tail_call_map(struct linx_bpf *skel)
+{
+    int enter_table_fd = bpf_map__fd(skel->maps.syscall_enter_tail_table);
+    int exit_table_fd = bpf_map__fd(skel->maps.syscall_exit_tail_table);
+    const char *enter_name, *exit_name;
+
+    for (int syscall_id = 0; syscall_id < LINX_SYSCALL_MAX_IDX; ++syscall_id) {
+        if (!g_plugin_config.open_config.interest_syscall_table[syscall_id]) {
+            LINX_LOG_DEBUG("The %s(%d) syscall is ont interest!",
+                           g_linx_syscall_table[syscall_id].name, syscall_id);
+            continue;
+        }
+
+        enter_name = g_linx_syscall_table[syscall_id].ebpf_prog_name[LINX_SYSCALL_TYPE_ENTER];
+        exit_name = g_linx_syscall_table[syscall_id].ebpf_prog_name[LINX_SYSCALL_TYPE_EXIT];
+
+        if (enter_name != NULL) {
+            if (linx_ebpf_add_prog_to_tail_table(skel, enter_table_fd, enter_name, syscall_id)) {
+                LINX_LOG_ERROR("Failed to add '%s' prog to syscall_enter_tail_table!", 
+                               enter_name);
+                goto clean_load_tail_call_map;
+            }
+        }
+
+        if (exit_name != NULL) {
+            if (linx_ebpf_add_prog_to_tail_table(skel, exit_table_fd, exit_name, syscall_id)) {
+                LINX_LOG_ERROR("Failed to add '%s' prog to syscall_exit_tail_table!", 
+                               exit_name);
+                goto clean_load_tail_call_map;
+            }
+        }
+    }
+    return 0;
+
+clean_load_tail_call_map:
+    close(enter_table_fd);
+    close(exit_table_fd);
+    return -1;
+}

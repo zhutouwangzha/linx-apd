@@ -1,0 +1,21 @@
+#ifndef __LINX_RESOURCE_CLEANUP_H__
+#define __LINX_RESOURCE_CLEANUP_H__
+
+typedef enum {
+    LINX_RESOURCE_CLEANUP_ERROR,
+    LINX_RESOURCE_CLEANUP_ARGS,
+    LINX_RESOURCE_CLEANUP_CONFIG,
+    LINX_RESOURCE_CLEANUP_LOG,
+    LINX_RESOURCE_CLEANUP_ALERT,
+    LINX_RESOURCE_CLEANUP_RULE_ENGINE,
+    LINX_RESOURCE_CLEANUP_ENGINE,
+    LINX_RESOURCE_CLEANUP_EVENT_RICH,
+    LINX_RESOURCE_CLEANUP_EVENT_QUEUE,
+    LINX_RESOURCE_CLEANUP_MAX
+} linx_resource_cleanup_type_t;
+
+linx_resource_cleanup_type_t *linx_resource_cleanup_get(void);
+
+void linx_resource_cleanup(void);
+
+#endif /* __LINX_RESOURCE_CLEANUP_H__ */

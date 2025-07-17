@@ -1,0 +1,1426 @@
+{
+  "read": {
+    "syscall_id": 0,
+    "interesting": 0
+  },
+  "write": {
+    "syscall_id": 1,
+    "interesting": 0
+  },
+  "open": {
+    "syscall_id": 2,
+    "interesting": 0
+  },
+  "close": {
+    "syscall_id": 3,
+    "interesting": 0
+  },
+  "stat": {
+    "syscall_id": 4,
+    "interesting": 0
+  },
+  "fstat": {
+    "syscall_id": 5,
+    "interesting": 0
+  },
+  "lstat": {
+    "syscall_id": 6,
+    "interesting": 0
+  },
+  "poll": {
+    "syscall_id": 7,
+    "interesting": 0
+  },
+  "lseek": {
+    "syscall_id": 8,
+    "interesting": 0
+  },
+  "mmap": {
+    "syscall_id": 9,
+    "interesting": 0
+  },
+  "mprotect": {
+    "syscall_id": 10,
+    "interesting": 0
+  },
+  "munmap": {
+    "syscall_id": 11,
+    "interesting": 0
+  },
+  "brk": {
+    "syscall_id": 12,
+    "interesting": 0
+  },
+  "rt_sigaction": {
+    "syscall_id": 13,
+    "interesting": 0
+  },
+  "rt_sigprocmask": {
+    "syscall_id": 14,
+    "interesting": 0
+  },
+  "rt_sigreturn": {
+    "syscall_id": 15,
+    "interesting": 0
+  },
+  "ioctl": {
+    "syscall_id": 16,
+    "interesting": 0
+  },
+  "pread64": {
+    "syscall_id": 17,
+    "interesting": 0
+  },
+  "pwrite64": {
+    "syscall_id": 18,
+    "interesting": 0
+  },
+  "readv": {
+    "syscall_id": 19,
+    "interesting": 0
+  },
+  "writev": {
+    "syscall_id": 20,
+    "interesting": 0
+  },
+  "access": {
+    "syscall_id": 21,
+    "interesting": 0
+  },
+  "pipe": {
+    "syscall_id": 22,
+    "interesting": 0
+  },
+  "select": {
+    "syscall_id": 23,
+    "interesting": 0
+  },
+  "sched_yield": {
+    "syscall_id": 24,
+    "interesting": 0
+  },
+  "mremap": {
+    "syscall_id": 25,
+    "interesting": 0
+  },
+  "msync": {
+    "syscall_id": 26,
+    "interesting": 0
+  },
+  "mincore": {
+    "syscall_id": 27,
+    "interesting": 0
+  },
+  "madvise": {
+    "syscall_id": 28,
+    "interesting": 0
+  },
+  "shmget": {
+    "syscall_id": 29,
+    "interesting": 0
+  },
+  "shmat": {
+    "syscall_id": 30,
+    "interesting": 0
+  },
+  "shmctl": {
+    "syscall_id": 31,
+    "interesting": 0
+  },
+  "dup": {
+    "syscall_id": 32,
+    "interesting": 0
+  },
+  "dup2": {
+    "syscall_id": 33,
+    "interesting": 0
+  },
+  "pause": {
+    "syscall_id": 34,
+    "interesting": 0
+  },
+  "nanosleep": {
+    "syscall_id": 35,
+    "interesting": 0
+  },
+  "getitimer": {
+    "syscall_id": 36,
+    "interesting": 0
+  },
+  "alarm": {
+    "syscall_id": 37,
+    "interesting": 0
+  },
+  "setitimer": {
+    "syscall_id": 38,
+    "interesting": 0
+  },
+  "getpid": {
+    "syscall_id": 39,
+    "interesting": 0
+  },
+  "sendfile": {
+    "syscall_id": 40,
+    "interesting": 0
+  },
+  "socket": {
+    "syscall_id": 41,
+    "interesting": 1
+  },
+  "connect": {
+    "syscall_id": 42,
+    "interesting": 1
+  },
+  "accept": {
+    "syscall_id": 43,
+    "interesting": 1
+  },
+  "sendto": {
+    "syscall_id": 44,
+    "interesting": 0
+  },
+  "recvfrom": {
+    "syscall_id": 45,
+    "interesting": 0
+  },
+  "sendmsg": {
+    "syscall_id": 46,
+    "interesting": 0
+  },
+  "recvmsg": {
+    "syscall_id": 47,
+    "interesting": 0
+  },
+  "shutdown": {
+    "syscall_id": 48,
+    "interesting": 0
+  },
+  "bind": {
+    "syscall_id": 49,
+    "interesting": 0
+  },
+  "listen": {
+    "syscall_id": 50,
+    "interesting": 0
+  },
+  "getsockname": {
+    "syscall_id": 51,
+    "interesting": 0
+  },
+  "getpeername": {
+    "syscall_id": 52,
+    "interesting": 0
+  },
+  "socketpair": {
+    "syscall_id": 53,
+    "interesting": 0
+  },
+  "setsockopt": {
+    "syscall_id": 54,
+    "interesting": 0
+  },
+  "getsockopt": {
+    "syscall_id": 55,
+    "interesting": 0
+  },
+  "clone": {
+    "syscall_id": 56,
+    "interesting": 0
+  },
+  "fork": {
+    "syscall_id": 57,
+    "interesting": 0
+  },
+  "vfork": {
+    "syscall_id": 58,
+    "interesting": 0
+  },
+  "execve": {
+    "syscall_id": 59,
+    "interesting": 0
+  },
+  "exit": {
+    "syscall_id": 60,
+    "interesting": 0
+  },
+  "wait4": {
+    "syscall_id": 61,
+    "interesting": 0
+  },
+  "kill": {
+    "syscall_id": 62,
+    "interesting": 0
+  },
+  "uname": {
+    "syscall_id": 63,
+    "interesting": 0
+  },
+  "semget": {
+    "syscall_id": 64,
+    "interesting": 0
+  },
+  "semop": {
+    "syscall_id": 65,
+    "interesting": 0
+  },
+  "semctl": {
+    "syscall_id": 66,
+    "interesting": 0
+  },
+  "shmdt": {
+    "syscall_id": 67,
+    "interesting": 0
+  },
+  "msgget": {
+    "syscall_id": 68,
+    "interesting": 0
+  },
+  "msgsnd": {
+    "syscall_id": 69,
+    "interesting": 0
+  },
+  "msgrcv": {
+    "syscall_id": 70,
+    "interesting": 0
+  },
+  "msgctl": {
+    "syscall_id": 71,
+    "interesting": 0
+  },
+  "fcntl": {
+    "syscall_id": 72,
+    "interesting": 0
+  },
+  "flock": {
+    "syscall_id": 73,
+    "interesting": 0
+  },
+  "fsync": {
+    "syscall_id": 74,
+    "interesting": 0
+  },
+  "fdatasync": {
+    "syscall_id": 75,
+    "interesting": 0
+  },
+  "truncate": {
+    "syscall_id": 76,
+    "interesting": 0
+  },
+  "ftruncate": {
+    "syscall_id": 77,
+    "interesting": 0
+  },
+  "getdents": {
+    "syscall_id": 78,
+    "interesting": 0
+  },
+  "getcwd": {
+    "syscall_id": 79,
+    "interesting": 0
+  },
+  "chdir": {
+    "syscall_id": 80,
+    "interesting": 0
+  },
+  "fchdir": {
+    "syscall_id": 81,
+    "interesting": 0
+  },
+  "rename": {
+    "syscall_id": 82,
+    "interesting": 0
+  },
+  "mkdir": {
+    "syscall_id": 83,
+    "interesting": 0
+  },
+  "rmdir": {
+    "syscall_id": 84,
+    "interesting": 0
+  },
+  "creat": {
+    "syscall_id": 85,
+    "interesting": 0
+  },
+  "link": {
+    "syscall_id": 86,
+    "interesting": 0
+  },
+  "unlink": {
+    "syscall_id": 87,
+    "interesting": 0
+  },
+  "symlink": {
+    "syscall_id": 88,
+    "interesting": 0
+  },
+  "readlink": {
+    "syscall_id": 89,
+    "interesting": 0
+  },
+  "chmod": {
+    "syscall_id": 90,
+    "interesting": 0
+  },
+  "fchmod": {
+    "syscall_id": 91,
+    "interesting": 0
+  },
+  "chown": {
+    "syscall_id": 92,
+    "interesting": 0
+  },
+  "fchown": {
+    "syscall_id": 93,
+    "interesting": 0
+  },
+  "lchown": {
+    "syscall_id": 94,
+    "interesting": 0
+  },
+  "umask": {
+    "syscall_id": 95,
+    "interesting": 0
+  },
+  "gettimeofday": {
+    "syscall_id": 96,
+    "interesting": 0
+  },
+  "getrlimit": {
+    "syscall_id": 97,
+    "interesting": 0
+  },
+  "getrusage": {
+    "syscall_id": 98,
+    "interesting": 0
+  },
+  "sysinfo": {
+    "syscall_id": 99,
+    "interesting": 0
+  },
+  "times": {
+    "syscall_id": 100,
+    "interesting": 0
+  },
+  "ptrace": {
+    "syscall_id": 101,
+    "interesting": 0
+  },
+  "getuid": {
+    "syscall_id": 102,
+    "interesting": 0
+  },
+  "syslog": {
+    "syscall_id": 103,
+    "interesting": 0
+  },
+  "getgid": {
+    "syscall_id": 104,
+    "interesting": 0
+  },
+  "setuid": {
+    "syscall_id": 105,
+    "interesting": 0
+  },
+  "setgid": {
+    "syscall_id": 106,
+    "interesting": 0
+  },
+  "geteuid": {
+    "syscall_id": 107,
+    "interesting": 0
+  },
+  "getegid": {
+    "syscall_id": 108,
+    "interesting": 0
+  },
+  "setpgid": {
+    "syscall_id": 109,
+    "interesting": 0
+  },
+  "getppid": {
+    "syscall_id": 110,
+    "interesting": 0
+  },
+  "getpgrp": {
+    "syscall_id": 111,
+    "interesting": 0
+  },
+  "setsid": {
+    "syscall_id": 112,
+    "interesting": 0
+  },
+  "setreuid": {
+    "syscall_id": 113,
+    "interesting": 0
+  },
+  "setregid": {
+    "syscall_id": 114,
+    "interesting": 0
+  },
+  "getgroups": {
+    "syscall_id": 115,
+    "interesting": 0
+  },
+  "setgroups": {
+    "syscall_id": 116,
+    "interesting": 0
+  },
+  "setresuid": {
+    "syscall_id": 117,
+    "interesting": 0
+  },
+  "getresuid": {
+    "syscall_id": 118,
+    "interesting": 0
+  },
+  "setresgid": {
+    "syscall_id": 119,
+    "interesting": 0
+  },
+  "getresgid": {
+    "syscall_id": 120,
+    "interesting": 0
+  },
+  "getpgid": {
+    "syscall_id": 121,
+    "interesting": 0
+  },
+  "setfsuid": {
+    "syscall_id": 122,
+    "interesting": 0
+  },
+  "setfsgid": {
+    "syscall_id": 123,
+    "interesting": 0
+  },
+  "getsid": {
+    "syscall_id": 124,
+    "interesting": 0
+  },
+  "capget": {
+    "syscall_id": 125,
+    "interesting": 0
+  },
+  "capset": {
+    "syscall_id": 126,
+    "interesting": 0
+  },
+  "rt_sigpending": {
+    "syscall_id": 127,
+    "interesting": 0
+  },
+  "rt_sigtimedwait": {
+    "syscall_id": 128,
+    "interesting": 0
+  },
+  "rt_sigqueueinfo": {
+    "syscall_id": 129,
+    "interesting": 0
+  },
+  "rt_sigsuspend": {
+    "syscall_id": 130,
+    "interesting": 0
+  },
+  "sigaltstack": {
+    "syscall_id": 131,
+    "interesting": 0
+  },
+  "utime": {
+    "syscall_id": 132,
+    "interesting": 0
+  },
+  "mknod": {
+    "syscall_id": 133,
+    "interesting": 0
+  },
+  "uselib": {
+    "syscall_id": 134,
+    "interesting": 0
+  },
+  "personality": {
+    "syscall_id": 135,
+    "interesting": 0
+  },
+  "ustat": {
+    "syscall_id": 136,
+    "interesting": 0
+  },
+  "statfs": {
+    "syscall_id": 137,
+    "interesting": 0
+  },
+  "fstatfs": {
+    "syscall_id": 138,
+    "interesting": 0
+  },
+  "sysfs": {
+    "syscall_id": 139,
+    "interesting": 0
+  },
+  "getpriority": {
+    "syscall_id": 140,
+    "interesting": 0
+  },
+  "setpriority": {
+    "syscall_id": 141,
+    "interesting": 0
+  },
+  "sched_setparam": {
+    "syscall_id": 142,
+    "interesting": 0
+  },
+  "sched_getparam": {
+    "syscall_id": 143,
+    "interesting": 0
+  },
+  "sched_setscheduler": {
+    "syscall_id": 144,
+    "interesting": 0
+  },
+  "sched_getscheduler": {
+    "syscall_id": 145,
+    "interesting": 0
+  },
+  "sched_get_priority_max": {
+    "syscall_id": 146,
+    "interesting": 0
+  },
+  "sched_get_priority_min": {
+    "syscall_id": 147,
+    "interesting": 0
+  },
+  "sched_rr_get_interval": {
+    "syscall_id": 148,
+    "interesting": 0
+  },
+  "mlock": {
+    "syscall_id": 149,
+    "interesting": 0
+  },
+  "munlock": {
+    "syscall_id": 150,
+    "interesting": 0
+  },
+  "mlockall": {
+    "syscall_id": 151,
+    "interesting": 0
+  },
+  "munlockall": {
+    "syscall_id": 152,
+    "interesting": 0
+  },
+  "vhangup": {
+    "syscall_id": 153,
+    "interesting": 0
+  },
+  "modify_ldt": {
+    "syscall_id": 154,
+    "interesting": 0
+  },
+  "pivot_root": {
+    "syscall_id": 155,
+    "interesting": 0
+  },
+  "_sysctl": {
+    "syscall_id": 156,
+    "interesting": 0
+  },
+  "prctl": {
+    "syscall_id": 157,
+    "interesting": 0
+  },
+  "arch_prctl": {
+    "syscall_id": 158,
+    "interesting": 0
+  },
+  "adjtimex": {
+    "syscall_id": 159,
+    "interesting": 0
+  },
+  "setrlimit": {
+    "syscall_id": 160,
+    "interesting": 0
+  },
+  "chroot": {
+    "syscall_id": 161,
+    "interesting": 0
+  },
+  "sync": {
+    "syscall_id": 162,
+    "interesting": 0
+  },
+  "acct": {
+    "syscall_id": 163,
+    "interesting": 0
+  },
+  "settimeofday": {
+    "syscall_id": 164,
+    "interesting": 0
+  },
+  "mount": {
+    "syscall_id": 165,
+    "interesting": 0
+  },
+  "umount2": {
+    "syscall_id": 166,
+    "interesting": 0
+  },
+  "swapon": {
+    "syscall_id": 167,
+    "interesting": 0
+  },
+  "swapoff": {
+    "syscall_id": 168,
+    "interesting": 0
+  },
+  "reboot": {
+    "syscall_id": 169,
+    "interesting": 0
+  },
+  "sethostname": {
+    "syscall_id": 170,
+    "interesting": 0
+  },
+  "setdomainname": {
+    "syscall_id": 171,
+    "interesting": 0
+  },
+  "iopl": {
+    "syscall_id": 172,
+    "interesting": 0
+  },
+  "ioperm": {
+    "syscall_id": 173,
+    "interesting": 0
+  },
+  "create_module": {
+    "syscall_id": 174,
+    "interesting": 0
+  },
+  "init_module": {
+    "syscall_id": 175,
+    "interesting": 0
+  },
+  "delete_module": {
+    "syscall_id": 176,
+    "interesting": 0
+  },
+  "get_kernel_syms": {
+    "syscall_id": 177,
+    "interesting": 0
+  },
+  "query_module": {
+    "syscall_id": 178,
+    "interesting": 0
+  },
+  "quotactl": {
+    "syscall_id": 179,
+    "interesting": 0
+  },
+  "nfsservctl": {
+    "syscall_id": 180,
+    "interesting": 0
+  },
+  "gettid": {
+    "syscall_id": 186,
+    "interesting": 0
+  },
+  "readahead": {
+    "syscall_id": 187,
+    "interesting": 0
+  },
+  "setxattr": {
+    "syscall_id": 188,
+    "interesting": 0
+  },
+  "lsetxattr": {
+    "syscall_id": 189,
+    "interesting": 0
+  },
+  "fsetxattr": {
+    "syscall_id": 190,
+    "interesting": 0
+  },
+  "getxattr": {
+    "syscall_id": 191,
+    "interesting": 0
+  },
+  "lgetxattr": {
+    "syscall_id": 192,
+    "interesting": 0
+  },
+  "fgetxattr": {
+    "syscall_id": 193,
+    "interesting": 0
+  },
+  "listxattr": {
+    "syscall_id": 194,
+    "interesting": 0
+  },
+  "llistxattr": {
+    "syscall_id": 195,
+    "interesting": 0
+  },
+  "flistxattr": {
+    "syscall_id": 196,
+    "interesting": 0
+  },
+  "removexattr": {
+    "syscall_id": 197,
+    "interesting": 0
+  },
+  "lremovexattr": {
+    "syscall_id": 198,
+    "interesting": 0
+  },
+  "fremovexattr": {
+    "syscall_id": 199,
+    "interesting": 0
+  },
+  "tkill": {
+    "syscall_id": 200,
+    "interesting": 0
+  },
+  "time": {
+    "syscall_id": 201,
+    "interesting": 0
+  },
+  "futex": {
+    "syscall_id": 202,
+    "interesting": 0
+  },
+  "sched_setaffinity": {
+    "syscall_id": 203,
+    "interesting": 0
+  },
+  "sched_getaffinity": {
+    "syscall_id": 204,
+    "interesting": 0
+  },
+  "set_thread_area": {
+    "syscall_id": 205,
+    "interesting": 0
+  },
+  "io_setup": {
+    "syscall_id": 206,
+    "interesting": 0
+  },
+  "io_destroy": {
+    "syscall_id": 207,
+    "interesting": 0
+  },
+  "io_getevents": {
+    "syscall_id": 208,
+    "interesting": 0
+  },
+  "io_submit": {
+    "syscall_id": 209,
+    "interesting": 0
+  },
+  "io_cancel": {
+    "syscall_id": 210,
+    "interesting": 0
+  },
+  "get_thread_area": {
+    "syscall_id": 211,
+    "interesting": 0
+  },
+  "lookup_dcookie": {
+    "syscall_id": 212,
+    "interesting": 0
+  },
+  "epoll_create": {
+    "syscall_id": 213,
+    "interesting": 0
+  },
+  "remap_file_pages": {
+    "syscall_id": 216,
+    "interesting": 0
+  },
+  "getdents64": {
+    "syscall_id": 217,
+    "interesting": 0
+  },
+  "set_tid_address": {
+    "syscall_id": 218,
+    "interesting": 0
+  },
+  "restart_syscall": {
+    "syscall_id": 219,
+    "interesting": 0
+  },
+  "semtimedop": {
+    "syscall_id": 220,
+    "interesting": 0
+  },
+  "fadvise64": {
+    "syscall_id": 221,
+    "interesting": 0
+  },
+  "timer_create": {
+    "syscall_id": 222,
+    "interesting": 0
+  },
+  "timer_settime": {
+    "syscall_id": 223,
+    "interesting": 0
+  },
+  "timer_gettime": {
+    "syscall_id": 224,
+    "interesting": 0
+  },
+  "timer_getoverrun": {
+    "syscall_id": 225,
+    "interesting": 0
+  },
+  "timer_delete": {
+    "syscall_id": 226,
+    "interesting": 0
+  },
+  "clock_settime": {
+    "syscall_id": 227,
+    "interesting": 0
+  },
+  "clock_gettime": {
+    "syscall_id": 228,
+    "interesting": 0
+  },
+  "clock_getres": {
+    "syscall_id": 229,
+    "interesting": 0
+  },
+  "clock_nanosleep": {
+    "syscall_id": 230,
+    "interesting": 0
+  },
+  "exit_group": {
+    "syscall_id": 231,
+    "interesting": 0
+  },
+  "epoll_wait": {
+    "syscall_id": 232,
+    "interesting": 0
+  },
+  "epoll_ctl": {
+    "syscall_id": 233,
+    "interesting": 0
+  },
+  "tgkill": {
+    "syscall_id": 234,
+    "interesting": 0
+  },
+  "utimes": {
+    "syscall_id": 235,
+    "interesting": 0
+  },
+  "mbind": {
+    "syscall_id": 237,
+    "interesting": 0
+  },
+  "set_mempolicy": {
+    "syscall_id": 238,
+    "interesting": 0
+  },
+  "get_mempolicy": {
+    "syscall_id": 239,
+    "interesting": 0
+  },
+  "mq_open": {
+    "syscall_id": 240,
+    "interesting": 0
+  },
+  "mq_unlink": {
+    "syscall_id": 241,
+    "interesting": 0
+  },
+  "mq_timedsend": {
+    "syscall_id": 242,
+    "interesting": 0
+  },
+  "mq_timedreceive": {
+    "syscall_id": 243,
+    "interesting": 0
+  },
+  "mq_notify": {
+    "syscall_id": 244,
+    "interesting": 0
+  },
+  "mq_getsetattr": {
+    "syscall_id": 245,
+    "interesting": 0
+  },
+  "kexec_load": {
+    "syscall_id": 246,
+    "interesting": 0
+  },
+  "waitid": {
+    "syscall_id": 247,
+    "interesting": 0
+  },
+  "add_key": {
+    "syscall_id": 248,
+    "interesting": 0
+  },
+  "request_key": {
+    "syscall_id": 249,
+    "interesting": 0
+  },
+  "keyctl": {
+    "syscall_id": 250,
+    "interesting": 0
+  },
+  "ioprio_set": {
+    "syscall_id": 251,
+    "interesting": 0
+  },
+  "ioprio_get": {
+    "syscall_id": 252,
+    "interesting": 0
+  },
+  "inotify_init": {
+    "syscall_id": 253,
+    "interesting": 0
+  },
+  "inotify_add_watch": {
+    "syscall_id": 254,
+    "interesting": 0
+  },
+  "inotify_rm_watch": {
+    "syscall_id": 255,
+    "interesting": 0
+  },
+  "migrate_pages": {
+    "syscall_id": 256,
+    "interesting": 0
+  },
+  "openat": {
+    "syscall_id": 257,
+    "interesting": 0
+  },
+  "mkdirat": {
+    "syscall_id": 258,
+    "interesting": 0
+  },
+  "mknodat": {
+    "syscall_id": 259,
+    "interesting": 0
+  },
+  "fchownat": {
+    "syscall_id": 260,
+    "interesting": 0
+  },
+  "futimesat": {
+    "syscall_id": 261,
+    "interesting": 0
+  },
+  "newfstatat": {
+    "syscall_id": 262,
+    "interesting": 0
+  },
+  "unlinkat": {
+    "syscall_id": 263,
+    "interesting": 1
+  },
+  "renameat": {
+    "syscall_id": 264,
+    "interesting": 0
+  },
+  "linkat": {
+    "syscall_id": 265,
+    "interesting": 0
+  },
+  "symlinkat": {
+    "syscall_id": 266,
+    "interesting": 0
+  },
+  "readlinkat": {
+    "syscall_id": 267,
+    "interesting": 0
+  },
+  "fchmodat": {
+    "syscall_id": 268,
+    "interesting": 0
+  },
+  "faccessat": {
+    "syscall_id": 269,
+    "interesting": 0
+  },
+  "pselect6": {
+    "syscall_id": 270,
+    "interesting": 0
+  },
+  "ppoll": {
+    "syscall_id": 271,
+    "interesting": 0
+  },
+  "unshare": {
+    "syscall_id": 272,
+    "interesting": 0
+  },
+  "set_robust_list": {
+    "syscall_id": 273,
+    "interesting": 0
+  },
+  "get_robust_list": {
+    "syscall_id": 274,
+    "interesting": 0
+  },
+  "splice": {
+    "syscall_id": 275,
+    "interesting": 0
+  },
+  "tee": {
+    "syscall_id": 276,
+    "interesting": 0
+  },
+  "sync_file_range": {
+    "syscall_id": 277,
+    "interesting": 0
+  },
+  "vmsplice": {
+    "syscall_id": 278,
+    "interesting": 0
+  },
+  "move_pages": {
+    "syscall_id": 279,
+    "interesting": 0
+  },
+  "utimensat": {
+    "syscall_id": 280,
+    "interesting": 0
+  },
+  "epoll_pwait": {
+    "syscall_id": 281,
+    "interesting": 0
+  },
+  "signalfd": {
+    "syscall_id": 282,
+    "interesting": 0
+  },
+  "timerfd_create": {
+    "syscall_id": 283,
+    "interesting": 0
+  },
+  "eventfd": {
+    "syscall_id": 284,
+    "interesting": 0
+  },
+  "fallocate": {
+    "syscall_id": 285,
+    "interesting": 0
+  },
+  "timerfd_settime": {
+    "syscall_id": 286,
+    "interesting": 0
+  },
+  "timerfd_gettime": {
+    "syscall_id": 287,
+    "interesting": 0
+  },
+  "accept4": {
+    "syscall_id": 288,
+    "interesting": 0
+  },
+  "signalfd4": {
+    "syscall_id": 289,
+    "interesting": 0
+  },
+  "eventfd2": {
+    "syscall_id": 290,
+    "interesting": 0
+  },
+  "epoll_create1": {
+    "syscall_id": 291,
+    "interesting": 0
+  },
+  "dup3": {
+    "syscall_id": 292,
+    "interesting": 0
+  },
+  "pipe2": {
+    "syscall_id": 293,
+    "interesting": 0
+  },
+  "inotify_init1": {
+    "syscall_id": 294,
+    "interesting": 0
+  },
+  "preadv": {
+    "syscall_id": 295,
+    "interesting": 0
+  },
+  "pwritev": {
+    "syscall_id": 296,
+    "interesting": 0
+  },
+  "rt_tgsigqueueinfo": {
+    "syscall_id": 297,
+    "interesting": 0
+  },
+  "perf_event_open": {
+    "syscall_id": 298,
+    "interesting": 0
+  },
+  "recvmmsg": {
+    "syscall_id": 299,
+    "interesting": 0
+  },
+  "fanotify_init": {
+    "syscall_id": 300,
+    "interesting": 0
+  },
+  "fanotify_mark": {
+    "syscall_id": 301,
+    "interesting": 0
+  },
+  "prlimit64": {
+    "syscall_id": 302,
+    "interesting": 0
+  },
+  "name_to_handle_at": {
+    "syscall_id": 303,
+    "interesting": 0
+  },
+  "open_by_handle_at": {
+    "syscall_id": 304,
+    "interesting": 0
+  },
+  "clock_adjtime": {
+    "syscall_id": 305,
+    "interesting": 0
+  },
+  "syncfs": {
+    "syscall_id": 306,
+    "interesting": 0
+  },
+  "sendmmsg": {
+    "syscall_id": 307,
+    "interesting": 0
+  },
+  "setns": {
+    "syscall_id": 308,
+    "interesting": 0
+  },
+  "getcpu": {
+    "syscall_id": 309,
+    "interesting": 0
+  },
+  "process_vm_readv": {
+    "syscall_id": 310,
+    "interesting": 0
+  },
+  "process_vm_writev": {
+    "syscall_id": 311,
+    "interesting": 0
+  },
+  "kcmp": {
+    "syscall_id": 312,
+    "interesting": 0
+  },
+  "finit_module": {
+    "syscall_id": 313,
+    "interesting": 0
+  },
+  "sched_setattr": {
+    "syscall_id": 314,
+    "interesting": 0
+  },
+  "sched_getattr": {
+    "syscall_id": 315,
+    "interesting": 0
+  },
+  "renameat2": {
+    "syscall_id": 316,
+    "interesting": 0
+  },
+  "seccomp": {
+    "syscall_id": 317,
+    "interesting": 0
+  },
+  "getrandom": {
+    "syscall_id": 318,
+    "interesting": 0
+  },
+  "memfd_create": {
+    "syscall_id": 319,
+    "interesting": 0
+  },
+  "kexec_file_load": {
+    "syscall_id": 320,
+    "interesting": 0
+  },
+  "bpf": {
+    "syscall_id": 321,
+    "interesting": 0
+  },
+  "execveat": {
+    "syscall_id": 322,
+    "interesting": 0
+  },
+  "userfaultfd": {
+    "syscall_id": 323,
+    "interesting": 0
+  },
+  "membarrier": {
+    "syscall_id": 324,
+    "interesting": 0
+  },
+  "mlock2": {
+    "syscall_id": 325,
+    "interesting": 0
+  },
+  "copy_file_range": {
+    "syscall_id": 326,
+    "interesting": 0
+  },
+  "preadv2": {
+    "syscall_id": 327,
+    "interesting": 0
+  },
+  "pwritev2": {
+    "syscall_id": 328,
+    "interesting": 0
+  },
+  "pkey_mprotect": {
+    "syscall_id": 329,
+    "interesting": 0
+  },
+  "pkey_alloc": {
+    "syscall_id": 330,
+    "interesting": 0
+  },
+  "pkey_free": {
+    "syscall_id": 331,
+    "interesting": 0
+  },
+  "statx": {
+    "syscall_id": 332,
+    "interesting": 0
+  },
+  "io_pgetevents": {
+    "syscall_id": 333,
+    "interesting": 0
+  },
+  "rseq": {
+    "syscall_id": 334,
+    "interesting": 0
+  },
+  "pidfd_send_signal": {
+    "syscall_id": 424,
+    "interesting": 0
+  },
+  "io_uring_setup": {
+    "syscall_id": 425,
+    "interesting": 0
+  },
+  "io_uring_enter": {
+    "syscall_id": 426,
+    "interesting": 0
+  },
+  "io_uring_register": {
+    "syscall_id": 427,
+    "interesting": 0
+  },
+  "open_tree": {
+    "syscall_id": 428,
+    "interesting": 0
+  },
+  "move_mount": {
+    "syscall_id": 429,
+    "interesting": 0
+  },
+  "fsopen": {
+    "syscall_id": 430,
+    "interesting": 0
+  },
+  "fsconfig": {
+    "syscall_id": 431,
+    "interesting": 0
+  },
+  "fsmount": {
+    "syscall_id": 432,
+    "interesting": 0
+  },
+  "fspick": {
+    "syscall_id": 433,
+    "interesting": 0
+  },
+  "pidfd_open": {
+    "syscall_id": 434,
+    "interesting": 0
+  },
+  "clone3": {
+    "syscall_id": 435,
+    "interesting": 0
+  },
+  "close_range": {
+    "syscall_id": 436,
+    "interesting": 0
+  },
+  "openat2": {
+    "syscall_id": 437,
+    "interesting": 0
+  },
+  "pidfd_getfd": {
+    "syscall_id": 438,
+    "interesting": 0
+  },
+  "faccessat2": {
+    "syscall_id": 439,
+    "interesting": 0
+  },
+  "process_madvise": {
+    "syscall_id": 440,
+    "interesting": 0
+  },
+  "epoll_pwait2": {
+    "syscall_id": 441,
+    "interesting": 0
+  },
+  "mount_setattr": {
+    "syscall_id": 442,
+    "interesting": 0
+  },
+  "quotactl_fd": {
+    "syscall_id": 443,
+    "interesting": 0
+  },
+  "landlock_create_ruleset": {
+    "syscall_id": 444,
+    "interesting": 0
+  },
+  "landlock_add_rule": {
+    "syscall_id": 445,
+    "interesting": 0
+  },
+  "landlock_restrict_self": {
+    "syscall_id": 446,
+    "interesting": 0
+  },
+  "memfd_secret": {
+    "syscall_id": 447,
+    "interesting": 0
+  },
+  "process_mrelease": {
+    "syscall_id": 448,
+    "interesting": 0
+  },
+  "futex_waitv": {
+    "syscall_id": 449,
+    "interesting": 0
+  },
+  "set_mempolicy_home_node": {
+    "syscall_id": 450,
+    "interesting": 0
+  },
+  "cachestat": {
+    "syscall_id": 451,
+    "interesting": 0
+  },
+  "fchmodat2": {
+    "syscall_id": 452,
+    "interesting": 0
+  }
+}

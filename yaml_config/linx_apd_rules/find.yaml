@@ -1,0 +1,19 @@
+- rule: Suspicious Use of Find to Locate Privileged Files
+  desc: Detects the use of the 'find' command with parameters that target privileged files, such as SUID/SGID binaries or files owned by root. This may indicate reconnaissance or privilege escalation activity.
+  condition: >
+    proc.name = find
+    and evt.type = execve
+    and evt.dir = <
+    and (
+    proc.cmdline icontains "pass"
+    or proc.cmdline icontains "-perm -4000"
+    or proc.cmdline icontains "-perm -u=s"
+    or proc.cmdline icontains "-user root")
+  output: >
+    Suspicious library read by find (pid=%proc.pid ppid=%proc.ppid user=%user.name command=%proc.cmdline)
+  priority: INFORMATIONAL
+  tags:
+    - system
+    - security
+    - discovery
+  chdesc: find查找特权文件

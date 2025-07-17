@@ -1,0 +1,131 @@
+# 配置文件目录，该目录下的配置会覆盖该文件内的配置
+config_files:
+  - /etc/linx_apd/config.d
+
+# 监听配置文件是否变更，改变了就改变全局配置
+watch_config_files: true
+
+# 规则文件路径，可以是目录也可以是文件
+rules_files:
+  - /etc/linx_apd/linx_apd_rules.yaml
+  - /etc/linx_apd/linx_apd_rules.local.yaml
+  - /etc/linx_apd/rules.d
+
+# 日志配置
+# 输出文件路径，可选配置为 stderr 和 文件路径，默认为 stderr
+# level: 日志级别，可选值：DEBUG, INFO, WARNING, ERROR, FATAL, 默认为ERROR
+log:
+  output: stderr
+  level: ERROR
+
+engine:
+  kind: ebpf
+  kmod:
+    log_path: /tmp/ebpf.log
+  ebpf:
+    drop_failed_exit: true
+
+# 要加载的插件
+load_plugins: [json, k8s]
+
+# 插件配置
+plugin:
+  - name: json
+    library_path: libplugin_json.so
+    init_config: ""
+  - name: k8s
+    library_path: libplugin_k8s.so
+    init_config: ""
+
+# 根据 /etc/localtime 设置显示日期和时间
+time_format_iso_8601: false
+
+# 将输出base64编码的数据缓冲区
+buffer_format_base64: false
+
+# 任何优先级级别大于或等于指定的最小级别的规则都将由 linx_apd 加载和运行。
+# 这允许您根据其严重性过滤和控制规则，
+# 确保只有特定优先级或更高优先级的规则是活动的。
+# 支持等级："emergency"、"alert"、"critical"、"error"、"warning"、"notice"、"info"、"debug"
+priority: debug
+
+# 如果设置为true，将通知包含在JSON格式的字符串中。
+json_output: false
+
+# 会在JSON对象的输出字段中找到纯文本形式的通知。
+# 如果不需要这些内容，可以禁用此选项以减少一些字节。
+json_include_output_property: true
+
+# 可以选择包含没有时间戳或优先级的格式化规则输出。
+# 例如，如果一个规则指定了一个“输出”属性，
+# 如“打开的进程%proc.name”，那么“message”字段将只包含“打开的进程bash”，
+# 而“输出”字段将包含更多信息。
+json_include_message_property: false
+
+# 可以选择包含单个输出字段，以便于访问。
+# 为了减少日志记录量，如果您的用例不需要，建议将其关闭。
+json_include_output_fields_property: true
+
+# 将在JSON对象中看到tags字段，其中包含匹配规则中指定的标签数组。
+# 没有定义标签的规则将在输出中有一个空数组（tags：[]）。
+# 如果禁用此选项，你将无法在JSON对象中获得tags字段。
+json_include_tags_property: true
+
+# 输出通道的全局缓冲选项。
+# 禁用后，支持缓冲的输出通道会在每次警报时刷新输出缓冲区。
+# 这可能导致CPU使用量增加，但在将输出管道输出到另一个进程或脚本时非常有用。
+# 缓冲目前由‘ file_output ’， ‘ program_output ’和‘ std_output ’支持。
+buffered_outputs: false
+
+# rule_matching 配置键的值是：
+# - 'first': 在第一个匹配规则中停止对即将到来的事件的规则条件检查
+# - ' all ': 将继续检查规则的条件，即使已经找到匹配的条件
+rule_matching: first
+
+outputs_queue:
+  capacity: 0
+
+append_output:
+  - suggested_output: true
+
+stdout_output:
+  enabled: true
+
+syslog_output:
+  enabled: true
+
+file_output:
+  enabled: false
+  keep_alive: false
+  filename: ./events.txt
+
+http_output:
+  enabled: false
+  url: http://some.url
+  user_agent: "falcosecurity/falco"
+  insecure: false
+  ca_cert: ""
+  ca_bundle: ""
+  ca_path: "/etc/ssl/certs"
+  mtls: false
+  client_cert: "/etc/ssl/certs/client.crt"
+  client_key: "/etc/ssl/certs/client.key"
+  echo: false
+  compress_uploads: false
+  keep_alive: false
+  max_consecutive_timeouts: 5
+
+program_output:
+  enabled: false
+  keep_alive: false
+  program: "jq '{text: .output}' | curl -d @- -X POST https://hooks.slack.com/services/XXX"
+
+grpc_output:
+  enabled: false
+
+grpc:
+  enabled: false
+  bind_address: "unix:///run/falco/falco.sock"
+  threadiness: 0
+
+

@@ -1,0 +1,10 @@
+# Your custom rules!
+
+- rule: Test linx_ebpf Event Source Output
+  desc: Test linx_ebpf Event Source Output
+  source: linx_ebpf
+  condition: >
+    evt.pluginname = syscall_sequence_plugin
+  output: >
+    %linx.time : %linx.dir %linx.type[value]%linx.args comm=%linx.comm cmdline=%linx.cmdline fds=%linx.fds 
+  priority: NOTICE

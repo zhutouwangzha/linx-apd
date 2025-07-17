@@ -1,0 +1,18 @@
+- rule: Detect MySQL Creating or Opening .so Files
+  desc: Detects when mysqld creates or opens a .so file, which may indicate UDF-based privilege escalation.
+  condition: >
+    proc.name = "mysqld" 
+    and evt.type = openat 
+    and fd.filename endswith ".so"
+    and evt.arg.flags icontains "O_WRONLY"
+  output: >
+    MySQL opened/created a .so file (pid=%proc.pid ppid=%proc.ppid user=%user.name command=%proc.cmdline filename=%fd.filename)
+  priority: WARNING
+  tags: 
+    - udf
+    - mysql
+    - privilige
+  chdesc: UDF提权
+  notify:
+    title: UDF提权
+    content: 检测到mysql进程.so文件写入行为，请确认是否是管理员或用户合法操作。

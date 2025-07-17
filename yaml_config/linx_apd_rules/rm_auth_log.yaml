@@ -1,0 +1,14 @@
+- rule: Detect the behavior of clearing the log
+  desc: Detect when echo "" command is executed to clear .log file
+  condition: >
+    proc.name=bash and (fd.name endswith '.log' or fd.name endswith secure) and evt.type = openat and (evt.args  contains '.log' or evt.args  contains 'secure')
+  output: >
+    ALERT: cleaning *.log detected (pid=%proc.pid ppid=%proc.ppid user=%user.name proc.name=%proc.name fd.name=$fd.name cmd=%proc.cmdline)
+  priority: WARNING
+  tags:
+    - filesystem
+    - suspicious
+  notify:
+    title: 攻击痕迹清理
+    content: 检测到清空日志的行为，可能存在潜在的黑客攻击 。 
+  chdesc: 日志清除

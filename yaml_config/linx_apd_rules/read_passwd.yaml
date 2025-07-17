@@ -1,0 +1,15 @@
+- rule: Passwd File Access by File Open
+  desc: Detect direct file open of sensitive files by known read tools
+  condition: >
+    evt.type = execve and
+    proc.name in (vim, vi, nvim, cat, less, more, tail, head) and
+    proc.args = "/etc/passwd" and
+    proc.cmdline contains "/etc/passwd"
+  output: >
+    [ALERT] %evt.time User=%user.name opened sensitive file %fd.name using %proc.name (%proc.cmdline pid=%proc.pid ppid=%proc.ppid)
+  priority: WARNING
+  tags: [filesystem, sensitive]
+  notify:
+    title: 敏感文件读取
+    content: 命令行读取/etc/passwd行为，请确认是否为合法操作
+  chdesc: 读取/etc/passwd敏感文件

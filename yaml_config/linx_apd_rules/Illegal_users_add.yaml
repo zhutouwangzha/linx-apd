@@ -1,0 +1,17 @@
+- rule: Unauthorized Modification of /etc/passwd or /etc/shadow
+  desc: Detects any modification to /etc/passwd or /etc/shadow by processes other than useradd and userdel
+  condition: >
+    fd.name in (/etc/passwd, /etc/shadow) 
+    and evt.type = write
+    and evt.dir = <
+    and not (proc.name in ("useradd", "userdel"))
+  output: >
+    Unauthorized modification of sensitive file (user=%user.name command=%proc.cmdline file=%fd.name data=%evt.arg.data pid=%proc.pid ppid=%proc.ppid)
+  priority: WARNING
+  tags:
+    - system
+    - security
+  chdesc:  非法增加新用户
+  notify:
+    title: 非法新增用户
+    content: 检测到未通过useradd，userdel管理用户，而是直接修改/etc/passwd或/etc/shadow文件，可能存在潜在的黑客攻击。 

@@ -1,0 +1,27 @@
+- rule: SSH Login Failed (PAM Authentication Failure)
+  desc: Detects failed SSH login attempts via PAM authentication failure.
+  condition: >
+    evt.type = sendto
+    and proc.name = "sshd"
+    and evt.args icontains "PAM:authentication"
+    and evt.args icontains "res=failed"
+  output: >
+    SSH login failed via PAM authentication (pid=%proc.pid ppid=%proc.ppid %evt.args)
+  priority:
+    INFORMATIONAL
+  tags: 
+    - ssh
+    - auth
+    - pam
+    - authentication
+    - failure
+
+  operation:
+    kind: exec
+    params: 
+      - iptables -I INPUT 1 -s %evt.arg.data.addr -j DROP
+      - evt.arg.data.addr
+  notify:
+    title: SSH登录失败
+    content: 检测到一次SSH登录失败事件 
+  chdesc: SSH登录失败

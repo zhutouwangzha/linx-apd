@@ -1,0 +1,19 @@
+- rule: Unauthorized Modification of authorized_keys File
+  desc: Detects attempts to write or append to .ssh/authorized_keys files, which may indicate persistence or lateral movement.
+  condition: >
+    fd.name endswith ".ssh/authorized_keys"
+    and evt.dir = <
+    and evt.type = write
+    and not proc.name in ("sshd")
+  output: >
+    Unauthorized modification of SSH authorized_keys file (pid=%proc.pid ppid=%proc.ppid user=%user.name command=%proc.cmdline file=%fd.name data=%evt.arg.data)
+  priority: WARNING
+  tags:
+    - system
+    - security
+    - persistence
+    - ssh
+  chdesc: SSH密钥添加
+  notify:
+    title: sshkey密钥添加
+    content: 检测到.ssh/authorized_keys文件写入行为，请确认是否是管理员或用户合法操作。

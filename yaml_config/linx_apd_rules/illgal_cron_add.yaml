@@ -1,0 +1,21 @@
+- rule: Unauthorized Modification of Crontab
+  desc: Detects unauthorized modification to system or user crontab entries by non-crontab processes
+  condition: >
+    (
+      fd.name startswith /etc/cron
+      or fd.name startswith /var/spool/cron/
+    )
+    and evt.dir = <
+    and evt.type = write
+    and not (proc.name = "crontab")
+  output: >
+    Unauthorized crontab modification detected (user=%user.name command=%proc.cmdline file=%fd.name data=%evt.arg.data pid=%proc.pid ppid=%proc.ppid)
+  priority: WARNING
+  tags:
+    - system
+    - security
+    - persistence
+  chdesc: 非法创建计划任务
+  notify:
+    title: 非法创建计划任务
+    content: 检测到未通过crontab命令创建计划任务，可能存在潜在的黑客攻击行为。

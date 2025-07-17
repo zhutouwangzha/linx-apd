@@ -1,0 +1,1 @@
+该模块用于解析 linx_apd.yaml 文件，并通过 linx_config_get 函数获取配置结构体。

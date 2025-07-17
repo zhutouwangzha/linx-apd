@@ -1,0 +1,164 @@
+#include <stddef.h>
+
+#include "linx_hash_map.h"
+
+static linx_hash_map_t *s_linx_hash_map = NULL;
+
+static void destroy_field_info(field_info_t *fields)
+{
+    field_info_t *current, *tmp;
+
+    HASH_ITER(hh, fields, current, tmp) {
+        HASH_DEL(fields, current);
+        free(current);
+    }
+}
+
+int linx_hash_map_init(void)
+{
+    s_linx_hash_map = (linx_hash_map_t *)malloc(sizeof(linx_hash_map_t));
+    if (s_linx_hash_map == NULL) {
+        return -1;
+    }
+
+    s_linx_hash_map->tables = NULL;
+
+    return 0;
+}
+
+void linx_hash_map_deinit(void)
+{
+    field_table_t *current_table, *tmp_table;
+
+    if (s_linx_hash_map != NULL) {
+        return;
+    }
+
+    HASH_ITER(hh, s_linx_hash_map->tables, current_table, tmp_table) {
+        HASH_DEL(s_linx_hash_map->tables, current_table);
+        destroy_field_info(current_table->fields);
+    }
+
+    free(s_linx_hash_map);
+}
+
+int linx_hash_map_create_table(const char *table_name, void *base_addr)
+{
+    field_table_t *existing_table, *new_table;
+
+    if (s_linx_hash_map == NULL || table_name == NULL || base_addr == NULL) {
+        return -1;
+    }
+
+    HASH_FIND_STR(s_linx_hash_map->tables, table_name, existing_table);
+    if (existing_table != NULL) {
+        return -1;
+    }
+
+    new_table = (field_table_t *)malloc(sizeof(field_table_t));
+    if (new_table == NULL) {
+        return -1;
+    }
+
+    new_table->table_name = strdup(table_name);
+    new_table->base_addr = base_addr;
+    new_table->fields = NULL;
+
+    HASH_ADD_STR(s_linx_hash_map->tables, table_name, new_table);
+
+    return 0;
+}
+
+int linx_hash_map_remove_table(const char *table_name)
+{
+    return 0;
+}
+
+int linx_hash_map_add_field(const char *table_name, const char *field_name, size_t offset, size_t size, field_type_t type)
+{
+    field_table_t *table;
+    field_info_t *existing_field, *new_field;
+
+    if (!s_linx_hash_map || !table_name || !field_name) {
+        return -1;
+    }
+
+    HASH_FIND_STR(s_linx_hash_map->tables, table_name, table);
+    if (!table) {
+        return -1;
+    }
+
+    HASH_FIND_STR(table->fields, field_name, existing_field);
+    if (existing_field != NULL) {
+        return -1;
+    }
+
+    new_field = malloc(sizeof(field_info_t));
+    if (new_field == NULL) {
+        return -1;
+    }
+
+    new_field->key = field_name;
+    new_field->offset = offset;
+    new_field->type = type;
+    new_field->size = size;
+
+    HASH_ADD_STR(table->fields, key, new_field);
+
+    return 0;
+}
+
+field_result_t linx_hash_map_get_field(const char *table_name, const char *field_name)
+{
+    field_table_t *table;
+    field_info_t *field;
+    field_result_t result = {0};
+
+    result.found = false;
+
+    if (!s_linx_hash_map || !table_name || !field_name) {
+        return result;
+    }
+
+    HASH_FIND_STR(s_linx_hash_map->tables, table_name, table);
+    if (!table) {
+        return result;
+    }
+
+    HASH_FIND_STR(table->fields, field_name, field);
+    if (!field) {
+        return result;
+    }
+
+    result.value_ptr = (void *)((char *)table->base_addr + field->offset);
+    result.type = field->type;
+    result.size = field->size;
+    result.found = true;
+    result.table_name = table->table_name;
+    result.field_name = field->key;
+
+    return result;
+}
+
+field_result_t linx_hash_map_get_field_by_path(char *path)
+{
+    char *table_name, *field_name;
+    field_result_t result = {0};
+    result.found = false;
+
+    if (path == NULL) {
+        return  result;
+    }
+
+    table_name = strtok(path, ".");
+    if (table_name == NULL) {
+        return result;
+    }
+
+    field_name = strtok(NULL, ".");
+    if (field_name == NULL) {
+        return result;
+    }
+
+    return linx_hash_map_get_field(table_name, field_name);
+}

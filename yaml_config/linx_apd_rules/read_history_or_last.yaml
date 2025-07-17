@@ -1,0 +1,16 @@
+- rule: Detect Read of Any .bash_history or Log or Last
+  desc: Detects when any .bash_history file is read by a process, triggering one alert for the first successful read.
+  condition: >
+    (evt.type = read and proc.name != bash and
+    (fd.name contains ".bash_history" or fd.name contains "auth.log")and 
+    evt.arg.res > 0 ) or
+    (evt.type = execve and proc.name = last)
+  output: >
+    Read detected on .bash_history or Last (time=%evt.time, process=%proc.name, type=%evt.type, file=%fd.name, pid=%proc.pid, ppid=%proc.ppid)
+  priority: WARNING
+  tags: [security, filesystem]
+
+  notify:
+    title: 存在系统信息搜集行为
+    content: 存在.bash_history文件阅读行为或Last命令执行行为
+  chdesc:  系统信息收集—查看历史执行命令

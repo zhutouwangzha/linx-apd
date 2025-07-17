@@ -1,0 +1,33 @@
+- rule: Detect MySQL Execution of Malicious UDF Functions (sys_eval/sys_exec)
+  desc: Detects SQL queries sent to mysqld that invoke known malicious UDF functions like sys_eval(), sys_exec(), which are often used for command execution.
+  condition: >
+    proc.name = "mysqld"
+    and evt.dir = "<"
+    and evt.type = "recvfrom"
+    and evt.arg.data icontains "select"
+    and (
+      evt.arg.data icontains "sys_eval("
+      or evt.arg.data icontains "sys_exec("
+      or evt.arg.data icontains "do_system("
+      or evt.arg.data icontains "cmd("
+      or evt.arg.data icontains "sh("
+      or evt.arg.data icontains "exec("
+    )
+  output: >
+    MySQL malicious UDF function detected! (pid=%proc.pid ppid=%proc.ppid user=%user.name command=%proc.cmdline query=%evt.arg.data fd.name=%fd.name protocol=%fd.typechar)
+  priority: EMERGENCY
+  tags:
+    - database
+    - mitre_execution
+    - udf
+    - sql_injection
+  chdesc: UDF提权
+  operation:
+    kind: exec
+    params: 
+      - kill -9 %proc.ppid
+      - proc.ppid
+
+  notify:
+    title: UDF提权
+    content: 检测到mysql中的危险函数执行系统命令，将kill恶意进程。
