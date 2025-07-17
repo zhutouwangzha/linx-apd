@@ -19,6 +19,7 @@ INCLUDE := -I$(TOPDIR)/include -I$(USR_DIR)/linx_arg_parser/include \
 			-I$(USR_DIR)/linx_rule_engine/rule_engine_match/include \
 			-I$(USR_DIR)/linx_rule_engine/rule_engine_ast/include \
 			-I$(USR_DIR)/linx_rule_engine/rule_engine_set/include \
+			-I$(USR_DIR)/linx_rule_engine/rule_engine_output/include \
 			-I$(USR_DIR)/linx_engine/include \
 			-I$(USR_DIR)/linx_alert/include/ \
 			-I$(USR_DIR)/linx_event_rich/include/ \
