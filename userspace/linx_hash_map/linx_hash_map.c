@@ -8,10 +8,25 @@ static void destroy_field_info(field_info_t *fields)
 {
     field_info_t *current, *tmp;
 
+    if (!fields) {
+        return;
+    }
+
     HASH_ITER(hh, fields, current, tmp) {
         HASH_DEL(fields, current);
         free(current);
     }
+}
+
+static void destroy_field_table(field_table_t *table)
+{
+    if (!table) {
+        return;
+    }
+
+    destroy_field_info(table->fields);
+    free(table->table_name);
+    free(table);
 }
 
 int linx_hash_map_init(void)
@@ -36,10 +51,11 @@ void linx_hash_map_deinit(void)
 
     HASH_ITER(hh, s_linx_hash_map->tables, current_table, tmp_table) {
         HASH_DEL(s_linx_hash_map->tables, current_table);
-        destroy_field_info(current_table->fields);
+        destroy_field_table(current_table);
     }
 
     free(s_linx_hash_map);
+    s_linx_hash_map = NULL;
 }
 
 int linx_hash_map_create_table(const char *table_name, void *base_addr)
@@ -71,6 +87,20 @@ int linx_hash_map_create_table(const char *table_name, void *base_addr)
 
 int linx_hash_map_remove_table(const char *table_name)
 {
+    field_table_t *table;
+
+    if (!s_linx_hash_map || !table_name) {
+        return -1;
+    }
+
+    HASH_FIND_STR(s_linx_hash_map->tables, table_name, table);
+    if (!table) {
+        return -1;
+    }
+
+    HASH_DEL(s_linx_hash_map->tables, table);
+    s_linx_hash_map->size--;
+
     return 0;
 }
 
@@ -98,7 +128,7 @@ int linx_hash_map_add_field(const char *table_name, const char *field_name, size
         return -1;
     }
 
-    new_field->key = field_name;
+    new_field->key = (char *)field_name;
     new_field->offset = offset;
     new_field->type = type;
     new_field->size = size;

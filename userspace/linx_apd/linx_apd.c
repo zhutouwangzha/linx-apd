@@ -55,10 +55,10 @@ static int linx_event_loop(void)
 
         }
 
-        ret = linx_alert_send();
-        if (ret) {
+        // ret = linx_alert_send();
+        // if (ret) {
 
-        }
+        // }
     }
 
     return ret;
@@ -133,7 +133,7 @@ int main(int argc, char *argv[])
      * 告警模块初始化
      * 后续应该将 linx_global_config 某个成员传入该函数
     */
-    ret = linx_alert_init();
+    ret = linx_alert_init(4);
     if (ret) {
         LINX_LOG_ERROR("linx_alert_init failed");
         goto out;

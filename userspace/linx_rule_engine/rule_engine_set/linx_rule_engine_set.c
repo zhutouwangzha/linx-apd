@@ -2,6 +2,7 @@
 #include <stdio.h>
 
 #include "linx_rule_engine_set.h"
+#include "linx_alert.h"
 
 static linx_rule_set_t *rule_set = NULL;
 
@@ -113,7 +114,7 @@ bool linx_rule_set_match_rule(void)
             if (rule_set->data.matches[i]->func(rule_set->data.matches[i]->context)) {
                 match = true;
                 
-
+                linx_alert_send_async(rule_set->data.outputs[i], rule_set->data.rules[i]->name, 0);
                 /**
                  * 这里有一个yaml配置可以控制匹配到规则后是否继续匹配后面的规则
                  * 计划在后续添加 

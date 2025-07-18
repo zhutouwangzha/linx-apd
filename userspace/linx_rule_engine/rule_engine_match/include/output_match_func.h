@@ -5,4 +5,6 @@
 
 int linx_output_match_compile(linx_output_match_t **match, char *format);
 
+int linx_output_match_format(linx_output_match_t *match, char *buffer, size_t buffer_size);
+
 #endif /* __OUTPUT_MATCH_FUNC_H__ */

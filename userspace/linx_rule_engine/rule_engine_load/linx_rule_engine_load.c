@@ -81,7 +81,7 @@ static int linx_rule_engine_add_rule_to_set(linx_yaml_node_t *root)
             LINX_LOG_ERROR("rule %s compile error", rule->name);
         }
 
-        ret = linx_output_match_compile(&output_match, rule->output);
+        ret = linx_output_match_compile(&output_match, (char *)rule->output);
         if (ret) {
             LINX_LOG_ERROR("rule %s output compile error", rule->name);
         }

@@ -9,7 +9,7 @@
 
 static linx_rule_match_t *compile_ast(ast_node_t *ast);
 
-static int find_field_name_and_value(ast_node_t *root, const char **name, num_context_t **ctx)
+static int find_field_name_and_value(ast_node_t *root, char **name, num_context_t **ctx)
 {
     ast_node_t *left, *right;
 
@@ -90,7 +90,7 @@ static linx_rule_match_t *compile_binary_bool_node(ast_node_t *node)
 static linx_rule_match_t *compile_binary_num_node(ast_node_t *node)
 {
     int ret;
-    const char *field_name;
+    char *field_name;
     linx_rule_match_t *match;
     num_context_t *context;
 

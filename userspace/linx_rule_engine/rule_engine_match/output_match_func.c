@@ -1,3 +1,5 @@
+#include <stdio.h>
+
 #include "output_match_func.h"
 #include "linx_hash_map.h"
 
@@ -152,11 +154,88 @@ int linx_output_match_compile(linx_output_match_t **match, char *format)
     return 0;
 }
 
-int linx_output_match_format(linx_output_match_t *match, char *buffer, size_t buffer_size)
+static size_t format_field_value(segment_t *segment, char *buffer, size_t buffer_size, size_t total_length)
 {
-    if (match == NULL) {
+    size_t field_str_len = 0;
+    char field_str[256] = {0};
+    field_result_t *field = &segment->data.variable;
+
+    if (!field->found || field->value_ptr == NULL) {
+        return field_str_len;
+    }
+
+    switch (field->type) {
+    case FIELD_TYPE_INT32:
+        field_str_len = snprintf(field_str, sizeof(field_str), "%d", *(int32_t *)field->value_ptr);
+        break;
+    case FIELD_TYPE_INT64:
+        field_str_len = snprintf(field_str, sizeof(field_str), "%ld", *(int64_t *)field->value_ptr);
+        break;
+    case FIELD_TYPE_STRING:
+        field_str_len = snprintf(field_str, sizeof(field_str), "%s", (char *)field->value_ptr);
+        break;
+    case FIELD_TYPE_BOOL:
+        field_str_len = snprintf(field_str, sizeof(field_str), "%s", *(bool *)field->value_ptr ? "true" : "false");
+        break;
+    case FIELD_TYPE_FLOAT:
+        field_str_len = snprintf(field_str, sizeof(field_str), "%f", *(float *)field->value_ptr);
+        break;
+    case FIELD_TYPE_DOUBLE:
+        field_str_len = snprintf(field_str, sizeof(field_str), "%lf", *(double *)field->value_ptr);
+        break;
+    default:
+        break;
+    }
+
+    if (field_str_len > 0 && 
+        total_length + field_str_len < buffer_size - 1)
+    {
+        strncat(buffer + total_length, field_str, field_str_len);
+    } else if (field_str_len > 0) {
         return -1;
     }
 
-    
+    return field_str_len;
+}
+
+int linx_output_match_format(linx_output_match_t *match, char *buffer, size_t buffer_size)
+{
+    size_t total_length = 0;
+    size_t literal_len, field_len;
+    segment_t *segment;
+
+    if (match == NULL || buffer == NULL || buffer_size == 0) {
+        return -1;
+    }
+
+
+    buffer[0] = '\0';
+
+    for (size_t i = 0; i < match->size; i++) { 
+        segment = match->segments[i];
+        if (segment == NULL) {
+            continue;
+        }
+
+        if (segment->type == SEGMENT_TYPE_LITERAL) {
+            literal_len = segment->data.literal.length;
+            if (total_length + literal_len >= buffer_size - 1) {
+                return -1;
+            }
+
+            strncat(buffer + total_length, segment->data.literal.text, literal_len);
+            total_length += literal_len;
+        } else if (segment->type == SEGMENT_TYPE_VARIABLE) {
+            field_len = format_field_value(segment, buffer, buffer_size, total_length);
+            if (field_len < 0) {
+                return -1;
+            } else if (field_len == 0) {
+                continue;
+            }
+
+            total_length += field_len;
+        }
+    }
+
+    return total_length;
 }

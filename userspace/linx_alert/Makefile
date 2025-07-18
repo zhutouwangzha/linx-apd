@@ -13,11 +13,14 @@ LIB_DIR := $(BUILD_DIR)/lib
 LIBRARY := $(LIB_DIR)/lib$(MODULE_NAME).a
 
 # 获取所有源文件
-SRCS := $(wildcard $(SRC_DIR)/*.c)
+SRCS := $(wildcard $(SRC_DIR)/*.c $(SRC_DIR)/*/*.c)
 OBJS := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/$(MODULE_NAME)/%.o,$(SRCS))
 
 # 添加包含路径
-CFLAGS += -I$(INCLUDE_DIR) -I$(TOPDIR)/include -I$(TOPDIR)/userspace
+CFLAGS += 	-I$(INCLUDE_DIR) -I$(TOPDIR)/include -I$(TOPDIR)/userspace \
+			-I$(USR_DIR)/linx_rule_engine/rule_engine_match/include \
+			-I$(USR_DIR)/linx_rule_engine/rule_engine_ast/include \
+			-I$(USR_DIR)/linx_thread_pool/include
 
 .PHONY: all clean
 
