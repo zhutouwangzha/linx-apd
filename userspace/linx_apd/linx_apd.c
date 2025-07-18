@@ -1,5 +1,8 @@
 #include <stdio.h>
 #include <signal.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "linx_log.h"
 #include "linx_alert.h"
@@ -16,49 +19,92 @@
 #include "linx_rule_engine_set.h"
 #include "linx_resource_cleanup.h"
 #include "linx_event_queue.h"
+#include "linx_event_processor.h"
 
 static int linx_event_loop(void)
 {
     int ret = 0;
     linx_resource_cleanup_type_t *type = linx_resource_cleanup_get();
+    linx_event_processor_config_t processor_config;
+    uint64_t total_events, processed_events, matched_events;
+    uint64_t last_total = 0, last_processed = 0, last_matched = 0;
+    int stats_counter = 0;
 
     ret = linx_event_rich_init();
     if (ret) {
-
+        LINX_LOG_ERROR("linx_event_rich_init failed");
+        return ret;
     } else {
         *type = LINX_RESOURCE_CLEANUP_EVENT_RICH;
     }
 
     ret = linx_engine_start();
     if (ret) {
-
+        LINX_LOG_ERROR("linx_engine_start failed");
+        return ret;
     }
 
+    /* 配置事件处理器 */
+    memset(&processor_config, 0, sizeof(processor_config));
+    processor_config.event_fetcher_threads = 0;    /* 使用默认值(CPU核数) */
+    processor_config.rule_matcher_threads = 0;     /* 使用默认值(CPU核数*2) */
+    processor_config.event_queue_size = 1000;
+    processor_config.enriched_queue_size = 2000;
+
+    /* 初始化事件处理器 */
+    ret = linx_event_processor_init(&processor_config);
+    if (ret) {
+        LINX_LOG_ERROR("linx_event_processor_init failed");
+        return ret;
+    }
+
+    /* 启动事件处理器 */
+    ret = linx_event_processor_start();
+    if (ret) {
+        LINX_LOG_ERROR("linx_event_processor_start failed");
+        return ret;
+    } else {
+        *type = LINX_RESOURCE_CLEANUP_EVENT_PROCESSOR;
+    }
+
+    LINX_LOG_INFO("Multi-threaded event processing started");
+
+    /* 主循环 - 监控和统计 */
     while (1) {
-        ret = linx_engine_next();
-        if (ret) {
-
+        sleep(5); /* 每5秒输出一次统计信息 */
+        
+        /* 获取统计信息 */
+        linx_event_processor_get_stats(&total_events, &processed_events, &matched_events);
+        
+        /* 计算增量 */
+        uint64_t delta_total = total_events - last_total;
+        uint64_t delta_processed = processed_events - last_processed;
+        uint64_t delta_matched = matched_events - last_matched;
+        
+        LINX_LOG_INFO("Event Stats: Total=%lu (+%lu), Processed=%lu (+%lu), Matched=%lu (+%lu)",
+                      total_events, delta_total, processed_events, delta_processed, 
+                      matched_events, delta_matched);
+        
+        last_total = total_events;
+        last_processed = processed_events;
+        last_matched = matched_events;
+        
+        stats_counter++;
+        
+        /* 每分钟输出详细统计 */
+        if (stats_counter % 12 == 0) {
+            LINX_LOG_INFO("=== Event Processing Performance ===");
+            LINX_LOG_INFO("Total Events: %lu", total_events);
+            LINX_LOG_INFO("Processed Events: %lu", processed_events);
+            LINX_LOG_INFO("Matched Events: %lu", matched_events);
+            if (total_events > 0) {
+                LINX_LOG_INFO("Processing Rate: %.2f%%", 
+                             (double)processed_events / total_events * 100);
+                LINX_LOG_INFO("Match Rate: %.2f%%", 
+                             (double)matched_events / processed_events * 100);
+            }
+            LINX_LOG_INFO("=====================================");
         }
-
-        ret = linx_event_rich();
-        if (ret) {
-
-        }
-
-        ret = linx_event_queue_push();
-        if (ret) {
-
-        }
-
-        ret = linx_rule_set_match_rule();
-        if (ret) {
-
-        }
-
-        // ret = linx_alert_send();
-        // if (ret) {
-
-        // }
     }
 
     return ret;

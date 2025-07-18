@@ -26,7 +26,8 @@ INCLUDE := -I$(TOPDIR)/include -I$(USR_DIR)/linx_arg_parser/include \
 			-I$(USR_DIR)/linx_thread/include/ \
 			-I$(USR_DIR)/linx_process_cache/include/ \
 			-I$(USR_DIR)/linx_apd/include/ \
-			-I$(USR_DIR)/linx_hash_map/include
+			-I$(USR_DIR)/linx_hash_map/include \
+			-I$(DEPENDS_DIR)/uthash/include
 
 CFLAGS 	:= -Wall -Wextra -g $(INCLUDE) \
 		   -DPCRE2_CODE_UNIT_WIDTH=8		# 这是pcre2库的编译选项，指定UTF8编码

@@ -11,6 +11,7 @@
 #include "linx_rule_engine_load.h"
 #include "linx_rule_engine_match.h"
 #include "linx_resource_cleanup.h"
+#include "linx_event_processor.h"
 
 static linx_resource_cleanup_type_t linx_resource_cleanup_type = LINX_RESOURCE_CLEANUP_ERROR;
 
@@ -22,11 +23,16 @@ linx_resource_cleanup_type_t *linx_resource_cleanup_get(void)
 void linx_resource_cleanup(void)
 {
     switch (linx_resource_cleanup_type) {
+    case LINX_RESOURCE_CLEANUP_EVENT_PROCESSOR:
+        linx_event_processor_cleanup();
+        /* fall through */
     case LINX_RESOURCE_CLEANUP_EVENT_QUEUE:
     case LINX_RESOURCE_CLEANUP_EVENT_RICH:
     case LINX_RESOURCE_CLEANUP_ENGINE:
     case LINX_RESOURCE_CLEANUP_RULE_ENGINE:
     case LINX_RESOURCE_CLEANUP_ALERT:
+        linx_alert_deinit();
+        /* fall through */
     case LINX_RESOURCE_CLEANUP_LOG:
         linx_log_deinit();
         /* fall through */
