@@ -17,6 +17,7 @@ int linx_rule_set_init(void)
 
     rule_set->data.rules = NULL;
     rule_set->data.matches = NULL;
+    rule_set->data.outputs = NULL;
 
     return 0;
 }
@@ -30,6 +31,7 @@ void linx_rule_set_deinit(void)
     for (size_t i = 0; i < rule_set->size; i++) {
         free(rule_set->data.rules[i]);
         free(rule_set->data.matches[i]);
+        free(rule_set->data.outputs[i]);
     }
 
     free(rule_set);
@@ -45,6 +47,7 @@ static int linx_rule_set_resize(void)
     size_t new_capacity;
     linx_rule_t **new_rules;
     linx_rule_match_t **new_matches;
+    linx_output_match_t **new_outputs;
 
     new_capacity = rule_set->capacity == 0 ? 16 : rule_set->capacity * 2;
 
@@ -59,16 +62,26 @@ static int linx_rule_set_resize(void)
         return -1;
     }
 
+    new_outputs = realloc(rule_set->data.outputs, new_capacity * sizeof(linx_output_match_t *));
+    if (new_outputs == NULL) {
+        free(new_rules);
+        free(new_matches);
+        return -1;
+    }
+
     rule_set->capacity = new_capacity;
     rule_set->data.rules = new_rules;
     rule_set->data.matches = new_matches;
+    rule_set->data.outputs = new_outputs;
 
     return 0;
 }
 
-int linx_rule_set_add(linx_rule_t *rule, linx_rule_match_t *match)
+int linx_rule_set_add(linx_rule_t *rule, linx_rule_match_t *match, linx_output_match_t *output)
 {
-    if (rule_set == NULL || rule == NULL || match == NULL) {
+    if (rule_set == NULL || rule == NULL || 
+        match == NULL || output == NULL) 
+    {
         return -1;
     }
 
@@ -80,6 +93,8 @@ int linx_rule_set_add(linx_rule_t *rule, linx_rule_match_t *match)
 
     rule_set->data.rules[rule_set->size] = rule;
     rule_set->data.matches[rule_set->size] = match;
+    rule_set->data.outputs[rule_set->size] = output;
+
     rule_set->size++;
 
     return 0;
@@ -98,7 +113,6 @@ bool linx_rule_set_match_rule(void)
             if (rule_set->data.matches[i]->func(rule_set->data.matches[i]->context)) {
                 match = true;
                 
-                printf("condition matched\n");
 
                 /**
                  * 这里有一个yaml配置可以控制匹配到规则后是否继续匹配后面的规则

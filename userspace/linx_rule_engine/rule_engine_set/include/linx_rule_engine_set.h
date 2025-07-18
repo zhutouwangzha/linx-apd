@@ -10,6 +10,7 @@ typedef struct {
     struct {
         linx_rule_t **rules;
         linx_rule_match_t **matches;
+        linx_output_match_t **outputs;
     } data;
 
     size_t size;
@@ -22,7 +23,7 @@ void linx_rule_set_deinit(void);
 
 linx_rule_set_t *linx_rule_set_get(void);
 
-int linx_rule_set_add(linx_rule_t *rule, linx_rule_match_t *match);
+int linx_rule_set_add(linx_rule_t *rule, linx_rule_match_t *match, linx_output_match_t *output);
 
 bool linx_rule_set_match_rule(void);
 

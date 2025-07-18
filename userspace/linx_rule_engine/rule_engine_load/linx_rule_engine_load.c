@@ -9,12 +9,33 @@
 #include "linx_rule_engine_set.h"
 #include "linx_rule_engine_ast.h"
 
+static void test(linx_output_match_t *output_match)
+{
+    segment_t *segment;
+
+    for (size_t i = 0; i < output_match->size; i++) {
+        segment = output_match->segments[i];
+
+        switch (segment->type) {
+        case SEGMENT_TYPE_LITERAL:
+            printf("%s", segment->data.literal.text);
+            break;
+        case SEGMENT_TYPE_VARIABLE:
+            printf("%% %s.%s", segment->data.variable.table_name, segment->data.variable.field_name);
+            break;
+        default:
+            break;
+        }
+    }
+}
+
 static int linx_rule_engine_add_rule_to_set(linx_yaml_node_t *root)
 {
     int ret = 0;
     linx_rule_t *rule;
     ast_node_t *ast_root = NULL;
     linx_rule_match_t *match = NULL;
+    linx_output_match_t *output_match = NULL;
     char path_buf[256] = {0};
 
     if (root == NULL) {
@@ -60,8 +81,15 @@ static int linx_rule_engine_add_rule_to_set(linx_yaml_node_t *root)
             LINX_LOG_ERROR("rule %s compile error", rule->name);
         }
 
+        ret = linx_output_match_compile(&output_match, rule->output);
+        if (ret) {
+            LINX_LOG_ERROR("rule %s output compile error", rule->name);
+        }
+
+        test(output_match);
+
         /* 转换成功则添加到列表中 */
-        ret = linx_rule_set_add(rule, match);
+        ret = linx_rule_set_add(rule, match, output_match);
         if (ret) {
             LINX_LOG_ERROR("add rule to rule set failed");
         }

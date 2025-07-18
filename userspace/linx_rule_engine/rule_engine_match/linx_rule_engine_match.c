@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 #include "linx_log.h"
-#include "match_func.h"
+#include "rule_match_func.h"
 #include "linx_rule_engine_ast.h"
 #include "linx_rule_engine_match.h"
 
@@ -44,8 +44,6 @@ static int find_field_name_and_value(ast_node_t *root, const char **name, num_co
     default:
         break;
     }
-
-    printf("get %Lf\n", right->data.number_value.double_value);
 
     return 0;
 }

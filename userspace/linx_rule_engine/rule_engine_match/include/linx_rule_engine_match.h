@@ -3,7 +3,8 @@
 
 #include <stdbool.h>
 
-#include "match_struct.h"
+#include "rule_match_struct.h"
+#include "output_match_func.h"
 
 #include "linx_rule_engine_ast.h"
 

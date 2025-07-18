@@ -1,0 +1,17 @@
+- rule: Passwd File Access by File Open
+  desc: Detect direct file open of sensitive files by known read tools
+  condition: >
+    evt.type > 1 and
+    (
+      evt.num < 2 or
+      evt.time > 3
+    )
+  output: >
+    [ALERT] %evt.time User=%evt.type opened sensitive file %evt.num using %evt.type (%evt.time pid=%evt.time ppid=%evt.time)
+  priority: WARNING
+  tags: [filesystem, sensitive]
+  notify:
+    title: 敏感文件读取
+    content: 命令行读取/etc/passwd行为，请确认是否为合法操作
+  chdesc: 读取/etc/passwd敏感文件
+
