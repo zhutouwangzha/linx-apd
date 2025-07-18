@@ -1,38 +1,64 @@
-# 子模块通用Makefile
-MODULE_NAME ?= $(notdir $(CURDIR))
+CC = gcc
+CFLAGS = -Wall -Wextra -std=c99 -pthread -fPIC
+INCLUDES = -Iinclude -I../linx_thread/include -I../linx_rule_engine/rule_engine_match/include -I../linx_hash_map/include
+LDFLAGS = -pthread
 
-# 使用绝对路径确保可靠性
-MODULE_DIR := $(CURDIR)
-SRC_DIR := $(MODULE_DIR)
-INCLUDE_DIR := $(MODULE_DIR)/include
+# 源文件
+SOURCES = linx_alert.c \
+          stdout/linx_alert_stdout.c \
+          file/linx_alert_file.c \
+          http/linx_alert_http.c \
+          syslog/linx_alert_syslog.c
 
-# 构建目录定义
-BUILD_DIR ?= $(TOPDIR)/build
-OBJ_DIR := $(BUILD_DIR)/obj
-LIB_DIR := $(BUILD_DIR)/lib
-LIBRARY := $(LIB_DIR)/lib$(MODULE_NAME).a
+# 目标文件
+OBJECTS = $(SOURCES:.c=.o)
 
-# 获取所有源文件
-SRCS := $(wildcard $(SRC_DIR)/*.c)
-OBJS := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/$(MODULE_NAME)/%.o,$(SRCS))
+# 静态库目标
+STATIC_LIB = liblinx_alert.a
 
-# 添加包含路径
-CFLAGS += -I$(INCLUDE_DIR) -I$(TOPDIR)/include -I$(TOPDIR)/userspace
+# 动态库目标
+SHARED_LIB = liblinx_alert.so
 
-.PHONY: all clean
+# 示例程序
+EXAMPLE = example/linx_alert_example
+EXAMPLE_SRC = example/linx_alert_example.c
 
-all: $(LIBRARY)
+# 默认目标
+all: $(STATIC_LIB) $(SHARED_LIB) $(EXAMPLE)
 
-$(LIBRARY): $(OBJS)
-	@mkdir -p $(dir $@)
-	@ar rcs $@ $^
-	@echo "[AR library]: $@"
+# 静态库
+$(STATIC_LIB): $(OBJECTS)
+	ar rcs $@ $^
 
-$(OBJ_DIR)/$(MODULE_NAME)/%.o: $(SRC_DIR)/%.c
-	@mkdir -p $(dir $@)
-	@echo "[CC]: $<"
-	@$(CC) $(CFLAGS) -c $< -o $@
+# 动态库
+$(SHARED_LIB): $(OBJECTS)
+	$(CC) -shared -o $@ $^ $(LDFLAGS)
 
+# 示例程序
+$(EXAMPLE): $(EXAMPLE_SRC) $(STATIC_LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -L. -llinx_alert -L../linx_thread -llinx_thread_pool -L../linx_rule_engine/rule_engine_match -loutput_match $(LDFLAGS)
+
+# 编译目标文件
+%.o: %.c
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+# 清理
 clean:
-	@rm -f $(LIBRARY)
-	@rm -rf $(OBJ_DIR)/$(MODULE_NAME)
+	rm -f $(OBJECTS) $(STATIC_LIB) $(SHARED_LIB) $(EXAMPLE)
+
+# 安装（可选）
+install: $(STATIC_LIB) $(SHARED_LIB)
+	mkdir -p /usr/local/lib
+	mkdir -p /usr/local/include/linx
+	cp $(STATIC_LIB) $(SHARED_LIB) /usr/local/lib/
+	cp include/linx_alert.h /usr/local/include/linx/
+
+# 测试
+test: $(EXAMPLE)
+	./$(EXAMPLE)
+
+# 调试版本
+debug: CFLAGS += -g -DDEBUG
+debug: all
+
+.PHONY: all clean install test debug
