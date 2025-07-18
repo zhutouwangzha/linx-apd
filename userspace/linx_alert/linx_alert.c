@@ -1,4 +1,5 @@
 #include "linx_alert.h"
+#include <stdint.h>
 
 static linx_alert_t *s_alert = NULL;
 
@@ -65,9 +66,22 @@ static void *linx_alert_worker_task(void *arg, int *should_stop)
     (void)should_stop;
     linx_alert_task_arg_t *task_arg = (linx_alert_task_arg_t *)arg;
 
-    if (task_arg && task_arg->message) {
-        linx_alert_send_to_outputs(task_arg->message);
-        linx_alert_message_destroy(task_arg->message);
+    /* 检查参数有效性 */
+    if (!task_arg) {
+        return NULL;
+    }
+
+    /* 检查指针是否有效 */
+    if ((uintptr_t)task_arg < 0x1000 || (uintptr_t)task_arg > 0x7fffffffffff) {
+        return NULL;
+    }
+
+    if (task_arg->message) {
+        /* 检查message指针是否有效 */
+        if ((uintptr_t)task_arg->message >= 0x1000 && (uintptr_t)task_arg->message <= 0x7fffffffffff) {
+            linx_alert_send_to_outputs(task_arg->message);
+            linx_alert_message_destroy(task_arg->message);
+        }
     }
 
     free(task_arg);
@@ -316,12 +330,20 @@ void linx_alert_message_destroy(linx_alert_message_t *message)
         return;
     }
 
+    /* 检查指针是否有效，避免访问无效内存 */
+    if ((uintptr_t)message < 0x1000 || (uintptr_t)message > 0x7fffffffffff) {
+        /* 无效指针，可能已被损坏 */
+        return;
+    }
+
     if (message->message) {
         free(message->message);
+        message->message = NULL;
     }
 
     if (message->rule_name) {
         free(message->rule_name);
+        message->rule_name = NULL;
     }
 
     free(message);
