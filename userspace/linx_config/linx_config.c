@@ -10,6 +10,10 @@ linx_global_config_t *linx_global_config = NULL;
 
 int linx_config_init(void)
 {
+    if (linx_global_config) {
+        return -1;
+    }
+
     linx_global_config = (linx_global_config_t *)malloc(sizeof(linx_global_config_t));
     if (!linx_global_config) {
         return -1;
@@ -22,10 +26,12 @@ int linx_config_init(void)
 
 void linx_config_deinit(void)
 {
-    if (linx_global_config) {
-        free(linx_global_config);
-        linx_global_config = NULL;
+    if (!linx_global_config) {
+        return;
     }
+
+    free(linx_global_config);
+    linx_global_config = NULL;
 }
 
 linx_global_config_t *linx_config_get(void)
@@ -48,15 +54,13 @@ int linx_config_load(const char *config_file)
     */
     root = linx_yaml_load(config_file);
     if (!root) {
-        ret = -1;
-        goto linx_config_load_out;
+        return -1;
     }
 
     config->engine = strdup(linx_yaml_get_string(root, "engine.kind", "unknown"));
     config->log_config.output = strdup(linx_yaml_get_string(root, "log.output", "stderr"));
     config->log_config.log_level = strdup(linx_yaml_get_string(root, "log.level", "ERROR"));
 
-linx_config_load_out:
     linx_yaml_node_free(root);
     return ret;
 }

@@ -17,7 +17,10 @@ linx_yaml_node_t *linx_yaml_node_create(linx_yaml_node_type_t type, const char *
 {
     /* 分配节点内存并检查是否成功 */
     linx_yaml_node_t *node = malloc(sizeof(linx_yaml_node_t));
-    
+    if (!node) {
+        return NULL;
+    }
+
     /* 初始化节点成员 */
     node->type = type;
     /* 如果key不为NULL则复制字符串，否则设为NULL */
@@ -51,8 +54,15 @@ void linx_yaml_node_free(linx_yaml_node_t *node)
     }
 
     // 释放键名和值的字符串内存
-    free(node->key);
-    free(node->value);
+    if (node->key) {
+        free(node->key);
+        node->key = NULL;
+    }
+
+    if (node->value) {
+        free(node->value);
+        node->value = NULL;
+    }
 
     // 递归释放所有子节点
     for (int i = 0; i < node->child_count; i++) {
@@ -61,7 +71,11 @@ void linx_yaml_node_free(linx_yaml_node_t *node)
 
     // 释放子节点指针数组和节点结构体
     free(node->children);
+    node->children = NULL;
+
+
     free(node);
+    node = NULL;
 }
 
 /**
@@ -73,28 +87,32 @@ void linx_yaml_node_free(linx_yaml_node_t *node)
  * @param parent 父节点指针，如果为NULL则直接返回
  * @param child 要添加的子节点指针，如果为NULL则直接返回
  */
-void linx_yaml_node_add_child(linx_yaml_node_t *parent, linx_yaml_node_t *child)
+int linx_yaml_node_add_child(linx_yaml_node_t *parent, linx_yaml_node_t *child)
 {
+    int new_capacity;
+    linx_yaml_node_t **new_children;
+
     // 检查输入参数有效性
     if (!parent || !child) {
-        return;
-    }
-
-    // 初始化子节点列表（如果尚未初始化）
-    if (parent->child_capacity == 0) {
-        parent->child_capacity = 4;
-        parent->children = malloc(parent->child_capacity * sizeof(linx_yaml_node_t *));
+        return -1;
     }
 
     // 检查并处理容量不足的情况
     if (parent->child_count >= parent->child_capacity) {
-        parent->child_capacity *= 2;
-        parent->children = realloc(parent->children, 
-                                   parent->child_capacity * sizeof(linx_yaml_node_t *));
+        new_capacity = parent->child_capacity ? (parent->child_capacity * 2) : 4;
+        new_children = realloc(parent->children, new_capacity * sizeof(linx_yaml_node_t *));
+        if (!new_children) {
+            return -1;
+        }
+        
+        parent->child_capacity = new_capacity;
+        parent->children = new_children;
     }
 
     // 添加子节点并更新计数
     parent->children[parent->child_count++] = child;
+
+    return 0;
 }
 
 /**

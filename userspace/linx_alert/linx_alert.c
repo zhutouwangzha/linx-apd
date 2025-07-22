@@ -62,8 +62,13 @@ static int linx_alert_send_to_outputs(linx_alert_message_t *message)
 
 static void *linx_alert_worker_task(void *arg, int *should_stop)
 {
-    (void)should_stop;
     linx_alert_task_arg_t *task_arg = (linx_alert_task_arg_t *)arg;
+
+    if (*should_stop == 2) {
+        linx_alert_message_destroy(task_arg->message);
+        free(task_arg);
+        return NULL;
+    }
 
     if (task_arg && task_arg->message) {
         linx_alert_send_to_outputs(task_arg->message);
@@ -123,6 +128,7 @@ int linx_alert_init(int thread_pool_size)
 
     return 0;
 }
+
 void linx_alert_deinit(void)
 {
     if (s_alert == NULL) {
@@ -318,11 +324,14 @@ void linx_alert_message_destroy(linx_alert_message_t *message)
 
     if (message->message) {
         free(message->message);
+        message->message = NULL;
     }
 
     if (message->rule_name) {
         free(message->rule_name);
+        message->rule_name = NULL;
     }
 
     free(message);
+    message = NULL;
 }

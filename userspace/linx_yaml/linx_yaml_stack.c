@@ -15,11 +15,20 @@ linx_yaml_stack_t *linx_yaml_stack_create(void)
 {
     /* 分配栈结构内存并初始化基本字段 */
     linx_yaml_stack_t *stack = malloc(sizeof(linx_yaml_stack_t));
+    if (!stack) {
+        return NULL;
+    }
+
     stack->capacity = 16;
     stack->size = 0;
     
     /* 分配节点指针数组内存 */
     stack->stack = malloc(stack->capacity * sizeof(linx_yaml_node_t *));
+    if (!stack->stack) {
+        free(stack);
+        return NULL;
+    }
+
     stack->current_key = NULL;
     
     return stack;
@@ -44,15 +53,20 @@ void linx_yaml_stack_free(linx_yaml_stack_t *stack)
     }
 
     /* 释放栈内部的节点指针数组 */
-    free(stack->stack);
+    if (stack->stack) {
+        free(stack->stack);
+        stack->stack = NULL;
+    }
     
     /* 释放当前键名字符串（如果已分配） */
     if (stack->current_key) {
         free(stack->current_key);
+        stack->current_key = NULL;
     }
 
     /* 最后释放栈结构体本身 */
     free(stack);
+    stack = NULL;
 }
 
 /**
@@ -64,16 +78,27 @@ void linx_yaml_stack_free(linx_yaml_stack_t *stack)
  * @param stack 指向YAML解析栈的指针，栈结构包含当前大小、容量和节点指针数组
  * @param node 要压入栈的YAML节点指针
  */
-void linx_yaml_stack_push(linx_yaml_stack_t *stack, linx_yaml_node_t *node)
+int linx_yaml_stack_push(linx_yaml_stack_t *stack, linx_yaml_node_t *node)
 {
+    int new_capacity;
+    linx_yaml_node_t **new_stack;
+
     /* 检查栈容量，不足时进行扩容 */
     if (stack->size >= stack->capacity) {
-        stack->capacity *= 2;
-        stack->stack = realloc(stack->stack, stack->capacity * sizeof(linx_yaml_node_t *));
+        new_capacity = stack->capacity * 2;
+        new_stack = realloc(stack->stack, new_capacity * sizeof(linx_yaml_node_t *));
+        if (!new_stack) {
+            return -1;
+        }
+        
+        stack->capacity = new_capacity;
+        stack->stack = new_stack;
     }
 
     /* 将节点压入栈顶并更新栈大小 */
     stack->stack[stack->size++] = node;
+
+    return 0;
 }
 
 linx_yaml_node_t *linx_yaml_stack_pop(linx_yaml_stack_t *stack)
@@ -81,6 +106,7 @@ linx_yaml_node_t *linx_yaml_stack_pop(linx_yaml_stack_t *stack)
     if (stack->size <= 0) {
         return NULL;
     }
+
     return stack->stack[--stack->size];
 }
 

@@ -12,7 +12,7 @@ int linx_engine_init(linx_global_config_t *config);
 
 int linx_engine_close(void);
 
-int linx_engine_next(void);
+int linx_engine_next(linx_event_t **event);
 
 int linx_engine_start(void);
 

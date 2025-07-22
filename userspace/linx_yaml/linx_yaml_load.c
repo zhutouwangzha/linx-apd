@@ -45,19 +45,26 @@ linx_yaml_node_t *linx_yaml_load(const char *config_file)
     linx_yaml_stack_t *stack = linx_yaml_stack_create();
     FILE *file;
     
+    if (!stack) {
+        return NULL;
+    }
+
     /* 前置检查：确保文件存在且可访问 */
     if (!file_exists(config_file)) {
+        linx_yaml_stack_free(stack);
         return NULL;
     }
 
     /* 打开文件并初始化YAML解析器 */
     file = fopen(config_file, "rb");
     if (!file) {
+        linx_yaml_stack_free(stack);
         return NULL;
     }
 
     if (!yaml_parser_initialize(&parser)) {
         fclose(file);
+        linx_yaml_stack_free(stack);
         return NULL;
     }
 
@@ -92,6 +99,11 @@ linx_yaml_node_t *linx_yaml_load(const char *config_file)
         {
             /* 处理映射类型节点创建 */
             linx_yaml_node_t *node = linx_yaml_node_create(LINX_YAML_NODE_TYPE_MAPPING, stack->current_key);
+            if (!node) {
+                printf("1");
+                error = 1;
+                break;
+            }
 
             if (stack->current_key) {
                 free(stack->current_key);
@@ -101,19 +113,30 @@ linx_yaml_node_t *linx_yaml_load(const char *config_file)
             /* 将节点添加到树结构中 */
             if (stack->size > 0) {
                 linx_yaml_node_t *parent = linx_yaml_stack_top(stack);
-                linx_yaml_node_add_child(parent, node);
+                if (!parent) {
+                    printf("2");
+                    error = 1;
+                    break;
+                }
+
+                error = linx_yaml_node_add_child(parent, node);
             } else if (!root) {
                 root = node;
             }
 
             stack->in_sequence = 0;
-            linx_yaml_stack_push(stack, node);
+            error |= linx_yaml_stack_push(stack, node);
             break;
         }
         case YAML_SEQUENCE_START_EVENT:
         {
             /* 处理序列类型节点创建 */
             linx_yaml_node_t *node = linx_yaml_node_create(LINX_YAML_NODE_TYPE_SEQUENCE, stack->current_key);
+            if (!node) {
+                printf("3");
+                error = 1;
+                break;
+            }
 
             if (stack->current_key) {
                 free(stack->current_key);
@@ -123,13 +146,19 @@ linx_yaml_node_t *linx_yaml_load(const char *config_file)
             /* 将节点添加到树结构中 */
             if (stack->size > 0) {
                 linx_yaml_node_t *parent = linx_yaml_stack_top(stack);
-                linx_yaml_node_add_child(parent, node);
+                if (!parent) {
+                    printf("4");
+                    error = 1;
+                    break;
+                }
+
+                error = linx_yaml_node_add_child(parent, node);
             } else if (!root) {
                 root = node;
             }
 
             stack->in_sequence = 1;
-            linx_yaml_stack_push(stack, node);
+            error |= linx_yaml_stack_push(stack, node);
             break;
         }
         case YAML_SCALAR_EVENT:
@@ -140,21 +169,44 @@ linx_yaml_node_t *linx_yaml_load(const char *config_file)
             if (stack->in_sequence) {
                 /* 序列中的标量值处理 */
                 linx_yaml_node_t *node = linx_yaml_node_create(LINX_YAML_NODE_TYPE_SCALAR, NULL);
+                if (!node) {
+                    printf("5");
+                    error = 1;
+                    break;
+                }
+
                 node->value = strdup(value);
                 node->is_sequence_item = 1;
 
                 if (stack->size > 0) {
                     linx_yaml_node_t *parent = linx_yaml_stack_top(stack);
-                    linx_yaml_node_add_child(parent, node);
+                    if (!parent) {
+                        printf("6");
+                        error = 1;
+                        break;
+                    }
+                    error = linx_yaml_node_add_child(parent, node);
                 }
             } else if (stack->current_key) {
                 /* 映射中的值处理 */
                 linx_yaml_node_t *node = linx_yaml_node_create(LINX_YAML_NODE_TYPE_SCALAR, stack->current_key);
+                if (!node) {
+                    printf("7");
+                    error = 1;
+                    break;
+                }
+
                 node->value = strdup(value);
 
                 if (stack->size > 0) {
                     linx_yaml_node_t *parent = linx_yaml_stack_top(stack);
-                    linx_yaml_node_add_child(parent, node);
+                    if (!parent) {
+                        printf("8");
+                        error = 1;
+                        break;
+                    }
+
+                    error = linx_yaml_node_add_child(parent, node);
                 }
 
                 free(stack->current_key);
@@ -168,11 +220,15 @@ linx_yaml_node_t *linx_yaml_load(const char *config_file)
         }
         case YAML_MAPPING_END_EVENT:
             /* 映射结束事件处理 */
-            linx_yaml_stack_pop(stack);
+            if (!linx_yaml_stack_pop(stack)) {
+                error = 1;
+            }
             break;
         case YAML_SEQUENCE_END_EVENT:
             /* 序列结束事件处理 */
-            linx_yaml_stack_pop(stack);
+            if (!linx_yaml_stack_pop(stack)) {
+                error = 1;
+            }
             stack->in_sequence = 0;
             break;
         default:
@@ -183,10 +239,6 @@ linx_yaml_node_t *linx_yaml_load(const char *config_file)
     }
 
     /* 清理资源 */
-    if (stack->current_key) {
-        free(stack->current_key);
-    }
-
     linx_yaml_stack_free(stack);
     yaml_parser_delete(&parser);
     fclose(file);

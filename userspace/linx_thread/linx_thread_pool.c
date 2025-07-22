@@ -78,13 +78,6 @@ static void *linx_thread_worker(void *arg)
             continue;
         }
 
-        pthread_mutex_unlock(&pool->lock);
-
-        /* 执行任务并释放任务结构体 */
-        (*(task->func))(task->arg, &task->should_stop);
-
-        pthread_mutex_lock(&pool->lock);
-
         /* 调整任务队列指针和大小 */
         pool->task_queue_head = task->next;
         if (pool->task_queue_head == NULL) {
@@ -94,6 +87,9 @@ static void *linx_thread_worker(void *arg)
         pool->queue_size--;
 
         pthread_mutex_unlock(&pool->lock);
+
+        /* 执行任务并释放任务结构体 */
+        (*(task->func))(task->arg, &task->should_stop);
 
         free(task);
     }

@@ -19,7 +19,9 @@ OBJS := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/$(MODULE_NAME)/%.o,$(SRCS))
 # 添加包含路径
 CFLAGS += 	-I$(INCLUDE_DIR) -I$(TOPDIR)/include \
 			-I$(TOPDIR)/userspace \
-			-I$(USR_DIR)/linx_hash_map/include
+			-I$(USR_DIR)/linx_hash_map/include \
+			-I$(DEPENDS_DIR)/uthash/include \
+			-I$(USR_DIR)/linx_engine/ebpf/include
 
 .PHONY: all clean
 

@@ -165,14 +165,35 @@ static size_t format_field_value(segment_t *segment, char *buffer, size_t buffer
     }
 
     switch (field->type) {
+    case FIELD_TYPE_INT8:
+        field_str_len = snprintf(field_str, sizeof(field_str), "%hhd", *(int8_t *)field->value_ptr);
+        break;
+    case FIELD_TYPE_UINT8:
+        field_str_len = snprintf(field_str, sizeof(field_str), "%hhu", *(uint8_t *)field->value_ptr);
+        break;
+    case FIELD_TYPE_INT16:
+        field_str_len = snprintf(field_str, sizeof(field_str), "%hd", *(int16_t *)field->value_ptr);
+        break;
+    case FIELD_TYPE_UINT16:
+        field_str_len = snprintf(field_str, sizeof(field_str), "%hu", *(uint16_t *)field->value_ptr);
+        break;
     case FIELD_TYPE_INT32:
         field_str_len = snprintf(field_str, sizeof(field_str), "%d", *(int32_t *)field->value_ptr);
+        break;
+    case FIELD_TYPE_UINT32:
+        field_str_len = snprintf(field_str, sizeof(field_str), "%u", *(uint32_t *)field->value_ptr);
         break;
     case FIELD_TYPE_INT64:
         field_str_len = snprintf(field_str, sizeof(field_str), "%ld", *(int64_t *)field->value_ptr);
         break;
-    case FIELD_TYPE_STRING:
+    case FIELD_TYPE_UINT64:
+        field_str_len = snprintf(field_str, sizeof(field_str), "%lu", *(uint64_t *)field->value_ptr);
+        break;
+    case FIELD_TYPE_CHARBUF:
         field_str_len = snprintf(field_str, sizeof(field_str), "%s", (char *)field->value_ptr);
+        break;
+    case FILED_TYPE_CHARBUF_ARRAY:
+        field_str_len = snprintf(field_str, sizeof(field_str), "%s", (char *)(*(uint64_t *)field->value_ptr));
         break;
     case FIELD_TYPE_BOOL:
         field_str_len = snprintf(field_str, sizeof(field_str), "%s", *(bool *)field->value_ptr ? "true" : "false");
@@ -227,9 +248,7 @@ int linx_output_match_format(linx_output_match_t *match, char *buffer, size_t bu
             total_length += literal_len;
         } else if (segment->type == SEGMENT_TYPE_VARIABLE) {
             field_len = format_field_value(segment, buffer, buffer_size, total_length);
-            if (field_len < 0) {
-                return -1;
-            } else if (field_len == 0) {
+            if (field_len == 0) {
                 continue;
             }
 
@@ -238,4 +257,30 @@ int linx_output_match_format(linx_output_match_t *match, char *buffer, size_t bu
     }
 
     return total_length;
+}
+
+void linx_output_match_destroy(linx_output_match_t *match)
+{
+    segment_t *segment;
+
+    if (!match) {
+        return;
+    }
+
+    for (size_t i = 0; i < match->size; ++i) {
+        segment = match->segments[i];
+
+        if (segment &&
+            segment->type == SEGMENT_TYPE_LITERAL) 
+        {
+            free(segment->data.literal.text);
+            segment->data.literal.text = NULL;
+
+            free(segment);
+            match->segments[i] = NULL;
+        }
+    }
+
+    free(match);
+    match = NULL;
 }

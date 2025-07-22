@@ -1,33 +1,53 @@
-TOPDIR 		= $(shell pwd)
-NAME 		= $(notdir $(CURDIR))
-BUILD_PATH	= $(TOPDIR)/build
-PLUGIN_OUT  = $(BUILD_PATH)/lib$(NAME).so
+CLANG 		?= clang
+LLVM_STRIP 	?= llvm-strip
+LLVM_LINK	?= llvm-link
+BPFTOOL 	?= bpftool
+ARCH 		?= x86
+BUILD_PATH 	:= $(BUILD_DIR)/ebpf
 
-.PHONY: all bpf plugin test clean get_syscall
+BPF_SRC 	= $(wildcard $(EBPF_DIR)/*.bpf.c $(EBPF_DIR)/tail_calls/*.bpf.c $(EBPF_DIR)/xdp/*.bpf.c)
+BPF_OBJS 	= $(BPF_SRC:.c=.o)
 
-all: bpf plugin test
+MODE_NAME 		= linx_bpf
+SKELETON_FILE 	= $(EBPF_DIR)/include/skel/$(MODE_NAME).skel.h
+BPF_LINK		= $(BUILD_PATH)/$(MODE_NAME).ll
+BPF_ELF			= $(BUILD_PATH)/$(MODE_NAME).bpf
 
-bpf: $(BUILD_PATH)
-	make -C ebpf
+INCLUDE 		= -I$(EBPF_DIR)/include -I$(TOPDIR)/include
 
-plugin: bpf
-	make -C plugin
+DEBUG			= -g
+WALL 			= -Wall
+OPTIMIZE		= -O2
 
-test: $(BUILD_PATH)
-	make -C test
+CLANG_FLAGS		= -target bpf -D__TARGET_ARCH_$(ARCH) $(DEBUG) $(WALL) $(OPTIMIZE) $(INCLUDE)
 
-$(BUILD_PATH):
-	mkdir -p $@
+.PHONY: all bpf skeleton
+
+all: bpf
+
+bpf: $(BPF_ELF) skeleton
+
+skeleton: $(SKELETON_FILE)
+
+%.bpf.o: %.bpf.c
+	@echo "[CLANG] $<"
+	@$(CLANG) $(CLANG_FLAGS) -emit-llvm -S $< -o $@
+
+$(BPF_LINK): $(BPF_OBJS)
+	@mkdir -p $(BUILD_PATH)
+	@echo "[LLVM_LINK] $@"
+	@$(LLVM_LINK) $^ -S -o $@
+
+$(BPF_ELF): $(BPF_LINK)
+	@echo "[CLANG] $@"
+	@$(CLANG) -target bpf -O2 -c $(BPF_LINK) -o $@
+	@echo "[LLVM_STRIP] $@"
+	@$(LLVM_STRIP) -g $@
+
+$(SKELETON_FILE): $(BPF_ELF)
+	@echo "[BPFTOOL] $@"
+	@$(BPFTOOL) gen skeleton -p $< > $@ name $(MODE_NAME)
 
 clean:
-	make -C ebpf clean
-	make -C plugin clean
-	make -C test clean
-	rm -rf $(BUILD_PATH)
-
-get_syscall:
-	bash $(TOPDIR)/scripts/get_syscalls_macro.sh $(TOPDIR)/include/macro/linx_syscalls_macro.h
-
-export TOPDIR
-export BUILD_PATH
-export PLUGIN_OUT
+	@echo "[RM] $(BPF_OBJS) $(SKELETON_FILE)"
+	@rm -rf $(BPF_OBJS) $(SKELETON_FILE)

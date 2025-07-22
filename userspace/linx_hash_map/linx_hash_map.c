@@ -31,6 +31,10 @@ static void destroy_field_table(field_table_t *table)
 
 int linx_hash_map_init(void)
 {
+    if (s_linx_hash_map) {
+        return -1;
+    }
+
     s_linx_hash_map = (linx_hash_map_t *)malloc(sizeof(linx_hash_map_t));
     if (s_linx_hash_map == NULL) {
         return -1;

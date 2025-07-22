@@ -30,12 +30,13 @@ void linx_rule_set_deinit(void)
     }
 
     for (size_t i = 0; i < rule_set->size; i++) {
-        free(rule_set->data.rules[i]);
-        free(rule_set->data.matches[i]);
-        free(rule_set->data.outputs[i]);
+        linx_rule_destroy(rule_set->data.rules[i]);
+        linx_rule_engine_match_destroy(rule_set->data.matches[i]);
+        linx_output_match_destroy(rule_set->data.outputs[i]);
     }
 
     free(rule_set);
+    rule_set = NULL;
 }
 
 linx_rule_set_t *linx_rule_set_get(void)

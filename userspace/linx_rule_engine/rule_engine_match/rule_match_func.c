@@ -61,3 +61,26 @@ bool num_le_matcher(void *context)
     long long value = (long long)(*(uint64_t *)ctx->field.value_ptr);
     return value <= ctx->number.int_val;
 }
+
+bool str_assign_matcher(void *context)
+{
+    int ret;
+    str_context_t *ctx = (str_context_t *)context;
+    
+    if (ctx->field.size != ctx->str_len) {
+        return false;
+    }
+
+    switch (ctx->field.type) {
+    case FIELD_TYPE_CHARBUF:
+        ret = strncmp(ctx->field.value_ptr, ctx->str, ctx->field.size);
+        break;
+    case FILED_TYPE_CHARBUF_ARRAY: 
+        ret = strncmp((char *)(*(uint64_t *)ctx->field.value_ptr), ctx->str, ctx->field.size);
+        break;
+    default:
+        break;
+    }
+
+    return (ret == 0) ? true : false;
+}

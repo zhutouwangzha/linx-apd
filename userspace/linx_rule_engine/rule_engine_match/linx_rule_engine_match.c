@@ -9,9 +9,11 @@
 
 static linx_rule_match_t *compile_ast(ast_node_t *ast);
 
-static int find_field_name_and_value(ast_node_t *root, char **name, num_context_t **ctx)
+static int find_field_name_and_value(ast_node_t *root, char **name, void **ctx)
 {
     ast_node_t *left, *right;
+    num_context_t **num_ctx;
+    str_context_t **str_ctx;
 
     if (root == NULL || 
         root->data.binary.left == NULL || 
@@ -36,10 +38,17 @@ static int find_field_name_and_value(ast_node_t *root, char **name, num_context_
 
     switch (right->type) {
     case AST_NODE_TYPE_INT:
-        (*ctx)->number.int_val = right->data.number_value.int_value;
+        num_ctx = (num_context_t **)ctx;
+        (*num_ctx)->number.int_val = right->data.number_value.int_value;
         break;
     case AST_NODE_TYPE_FLOAT:
-        (*ctx)->number.double_val = right->data.number_value.double_value;
+        num_ctx = (num_context_t **)ctx;
+        (*num_ctx)->number.double_val = right->data.number_value.double_value;
+        break;
+    case AST_NODE_TYPE_STRING:
+        str_ctx = (str_context_t **)ctx;
+        (*str_ctx)->str = strdup(right->data.string_value);
+        (*str_ctx)->str_len = strlen(right->data.string_value);
         break;
     default:
         break;
@@ -136,7 +145,7 @@ static linx_rule_match_t *compile_binary_num_node(ast_node_t *node)
 static linx_rule_match_t *compile_binary_str_node(ast_node_t *node)
 {
     int ret;
-    const char *field_name;
+    char *field_name;
     linx_rule_match_t *match;
     str_context_t *context;
 
@@ -147,18 +156,22 @@ static linx_rule_match_t *compile_binary_str_node(ast_node_t *node)
 
     context = malloc(sizeof(num_context_t));
     if (context == NULL) {
+        free(match);
         return NULL;
     }
 
-    // ret = find_field_name_and_value(node, field_name, context);
-    // if (ret) {
-    //     LINX_LOG_ERROR("Failed to find field name");
-    // }
+    ret = find_field_name_and_value(node, &field_name, &context);
+    if (ret) {
+        LINX_LOG_ERROR("Failed to find field name");
+    }
+
+    context->field = linx_hash_map_get_field_by_path(field_name);
 
     switch (node->data.binary.op.str_op) {
     case BINARY_STR_OP_EQ:
         break;
     case BINARY_STR_OP_ASSIGN:
+        match->func = str_assign_matcher;
         break;
     case BINARY_STR_OP_NE:
         break;
@@ -183,6 +196,8 @@ static linx_rule_match_t *compile_binary_str_node(ast_node_t *node)
     default:
         break;
     }
+
+    match->context = context;
 
     return match;
 }
@@ -299,7 +314,64 @@ int linx_compile_ast(ast_node_t *ast, linx_rule_match_t **match)
     
     *match = compile_ast(ast);
 
+    ast_node_destroy(ast);
+
     return ret;
+}
+
+void linx_rule_engine_match_destroy(linx_rule_match_t *match)
+{
+    str_context_t *s_context;
+    num_context_t *n_context;
+    logic_context_t *l_context;
+
+    if (!match) {
+        return;
+    }
+
+    switch (match->type) {
+    case MATCH_CONTEXT_STR:
+        s_context = (str_context_t *)match->context;
+        if (s_context) {
+            if (s_context->str) {
+                free(s_context->str);
+                s_context->str = NULL;
+            }
+
+            free(s_context);
+            match->context = NULL;
+        }
+        break;
+    case MATCH_CONTEXT_NUM:
+        n_context = (num_context_t *)match->context;
+        if (n_context) {
+            free(n_context);
+            match->context = NULL;
+        }
+        break;
+    case MATCH_CONTEXT_LOGIC:
+        l_context = (logic_context_t *)match->context;
+        if (l_context) {
+            if (l_context->left) {
+                linx_rule_engine_match_destroy(l_context->left);
+                l_context->left = NULL;
+            }
+
+            if (l_context->right) {
+                linx_rule_engine_match_destroy(l_context->left);
+                l_context->right = NULL;
+            }
+
+            free(l_context);
+            match->context = NULL;
+        }
+        break;
+    default:
+        break;
+    }
+
+    free(match);
+    match = NULL;
 }
 
 bool linx_rule_engine_match(linx_rule_match_t *match)

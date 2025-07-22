@@ -8,8 +8,10 @@
 
 #include "linx_rule_engine_ast.h"
 
-bool linx_rule_engine_match(linx_rule_match_t *match);
-
 int linx_compile_ast(ast_node_t *ast, linx_rule_match_t **match);
+
+void linx_rule_engine_match_destroy(linx_rule_match_t *match);
+
+bool linx_rule_engine_match(linx_rule_match_t *match);
 
 #endif /* __LINX_RULE_ENGINE_MATCH_H__ */

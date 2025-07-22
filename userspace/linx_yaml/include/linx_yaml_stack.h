@@ -15,7 +15,7 @@ linx_yaml_stack_t *linx_yaml_stack_create(void);
 
 void linx_yaml_stack_free(linx_yaml_stack_t *stack);
 
-void linx_yaml_stack_push(linx_yaml_stack_t *stack, linx_yaml_node_t *node);
+int linx_yaml_stack_push(linx_yaml_stack_t *stack, linx_yaml_node_t *node);
 
 linx_yaml_node_t *linx_yaml_stack_pop(linx_yaml_stack_t *stack);
 

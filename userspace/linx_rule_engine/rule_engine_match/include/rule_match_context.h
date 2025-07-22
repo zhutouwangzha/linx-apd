@@ -11,7 +11,9 @@ typedef enum {
 } match_context_type_t;
 
 typedef struct {
+    field_result_t field;
     const char *str;
+    size_t str_len;
 } str_context_t;
 
 typedef struct {

@@ -25,7 +25,8 @@ CFLAGS += -I$(INCLUDE_DIR) -I$(TOPDIR)/include \
 		  -I$(MODULE_DIR)/rule_engine_set/include \
 		  -I$(USR_DIR)/linx_regex/include \
 		  -I$(USR_DIR)/linx_hash_map/include \
-		  -I$(USR_DIR)/linx_alert/include
+		  -I$(USR_DIR)/linx_alert/include \
+		  -I$(DEPENDS_DIR)/uthash/include
 
 .PHONY: all clean
 

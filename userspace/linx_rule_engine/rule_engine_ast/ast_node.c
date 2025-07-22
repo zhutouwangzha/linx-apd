@@ -21,9 +21,11 @@ void ast_node_destroy(ast_node_t *node)
     switch (node->type) {
     case AST_NODE_TYPE_STRING:
         free(node->data.string_value);
+        node->data.string_value = NULL;
         break;
     case AST_NODE_TYPE_FIELD_NAME:
         free(node->data.field_name);
+        node->data.field_name = NULL;
         break;
     case AST_NODE_TYPE_BIN_NUM_OP:
     case AST_NODE_TYPE_BIN_STR_OP:
@@ -39,12 +41,14 @@ void ast_node_destroy(ast_node_t *node)
         }
 
         free(node->data.list.items);
+        node->data.list.items = NULL;
         break;
     default:
         break;
     }
 
     free(node);
+    node = NULL;
 }
 
 ast_node_t *ast_node_create_number(long long value)

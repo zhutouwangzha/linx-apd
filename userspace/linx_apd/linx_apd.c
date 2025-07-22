@@ -16,18 +16,12 @@
 #include "linx_rule_engine_set.h"
 #include "linx_resource_cleanup.h"
 #include "linx_event_queue.h"
-
+#include "linx_event.h"
 static int linx_event_loop(void)
 {
     int ret = 0;
     linx_resource_cleanup_type_t *type = linx_resource_cleanup_get();
-
-    ret = linx_event_rich_init();
-    if (ret) {
-
-    } else {
-        *type = LINX_RESOURCE_CLEANUP_EVENT_RICH;
-    }
+    linx_event_t *event = NULL;
 
     ret = linx_engine_start();
     if (ret) {
@@ -35,12 +29,12 @@ static int linx_event_loop(void)
     }
 
     while (1) {
-        ret = linx_engine_next();
-        if (ret) {
-
+        ret = linx_engine_next(&event);
+        if (ret <= 0) {
+            continue;
         }
 
-        ret = linx_event_rich();
+        ret = linx_event_rich(event);
         if (ret) {
 
         }
@@ -54,11 +48,6 @@ static int linx_event_loop(void)
         if (ret) {
 
         }
-
-        // ret = linx_alert_send();
-        // if (ret) {
-
-        // }
     }
 
     return ret;
@@ -127,6 +116,15 @@ int main(int argc, char *argv[])
     ret = linx_event_queue_init(2);
     if (ret) {
         LINX_LOG_ERROR("linx_event_queue_init failed\n");
+    } else {
+        *type = LINX_RESOURCE_CLEANUP_EVENT_QUEUE;
+    }
+
+    ret = linx_event_rich_init();
+    if (ret) {
+
+    } else {
+        *type = LINX_RESOURCE_CLEANUP_EVENT_RICH;
     }
 
     /**

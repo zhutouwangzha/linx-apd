@@ -47,6 +47,10 @@ const struct argp linx_argp = {
 
 int linx_arg_init(void)
 {
+    if (linx_arg_config) {
+        return -1;
+    }
+
     linx_arg_config = (linx_arg_config_t *)malloc(sizeof(linx_arg_config_t));
     if (linx_arg_config == NULL) {
         return -1;
@@ -61,9 +65,18 @@ void linx_arg_deinit(void)
         return;
     }
 
-    free(linx_arg_config->linx_apd_config);
-    free(linx_arg_config->linx_apd_rules);
+    if (linx_arg_config->linx_apd_config) {
+        free(linx_arg_config->linx_apd_config);
+        linx_arg_config->linx_apd_config = NULL;
+    }
+
+    if (linx_arg_config->linx_apd_rules) {
+        free(linx_arg_config->linx_apd_rules);
+        linx_arg_config->linx_apd_rules = NULL;
+    }
+
     free(linx_arg_config);
+    linx_arg_config = NULL;
 }
 
 const struct argp *linx_argp_get_argp(void)

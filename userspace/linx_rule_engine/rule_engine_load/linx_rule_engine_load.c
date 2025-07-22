@@ -43,7 +43,10 @@ static int linx_rule_engine_add_rule_to_set(linx_yaml_node_t *root)
     }
 
     for (int i = 0; i < root->child_count; ++i) {
-        rule = malloc(sizeof(linx_rule_t));
+        rule = linx_rule_create();
+        if (!rule) {
+            return -1;
+        }
 
         snprintf(path_buf, sizeof(path_buf), "%d.rule", i);
         rule->name = strdup(linx_yaml_get_string(root, path_buf, "unknown"));
@@ -185,4 +188,79 @@ int linx_rule_engine_load(const char *rules_file_path)
     }
 
     return ret;
+}
+
+linx_rule_t *linx_rule_create(void)
+{
+    linx_rule_t *rule = malloc(sizeof(linx_rule_t));
+    if (!rule) {
+        return NULL;
+    }
+
+    rule->name = NULL;
+    rule->desc = NULL;
+    rule->condition = NULL;
+    rule->output = NULL;
+    rule->priority = NULL;
+    rule->tags = NULL;
+    rule->chdesc = NULL;
+    rule->notify.title = NULL;
+    rule->notify.content = NULL;
+
+    return rule;
+}
+
+void linx_rule_destroy(linx_rule_t *rule)
+{
+    if (!rule) {
+        return;
+    }
+
+    if (rule->name) {
+        free(rule->name);
+        rule->name = NULL;
+    }
+
+    if (rule->desc) {
+        free(rule->desc);
+        rule->desc = NULL;
+    }
+
+    if (rule->condition) {
+        free(rule->condition);
+        rule->condition = NULL;
+    }
+
+    if (rule->output) {
+        free(rule->output);
+        rule->output = NULL;
+    }
+
+    if (rule->priority) {
+        free(rule->priority);
+        rule->priority = NULL;
+    }
+
+    if (rule->tags) {
+        free(rule->tags);
+        rule->tags = NULL;
+    }
+
+    if (rule->chdesc) {
+        free(rule->chdesc);
+        rule->chdesc = NULL;
+    }
+
+    if (rule->notify.title) {
+        free(rule->notify.title);
+        rule->notify.title = NULL;
+    }
+
+    if (rule->notify.content) {
+        free(rule->notify.content);
+        rule->notify.content = NULL;
+    }
+
+    free(rule);
+    rule = NULL;
 }

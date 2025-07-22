@@ -1,6 +1,7 @@
 #include "linx_engine.h"
+#include "linx_engine_ebpf.h"
 
-// static linx_engine_t linx_engine;
+static linx_engine_t linx_engine;
 
 int linx_engine_init(linx_global_config_t *config)
 {
@@ -10,8 +11,9 @@ int linx_engine_init(linx_global_config_t *config)
     */
    (void)config;
 
-    // return linx_engine.vtable->init();
-    return 0;
+    linx_engine.vtable = &ebpf_vtable;
+
+    return linx_engine.vtable->init();
 }
 
 int linx_engine_close(void)
@@ -20,10 +22,9 @@ int linx_engine_close(void)
     return 0;
 }
 
-int linx_engine_next(void)
+int linx_engine_next(linx_event_t **event)
 {
-    // return linx_engine.vtable->next();
-    return 0;
+    return linx_engine.vtable->next(event);
 }
 
 int linx_engine_start(void)

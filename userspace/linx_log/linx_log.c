@@ -223,6 +223,10 @@ int linx_log_init(const char *log_file, const char *log_level)
     }
 
     // 分配全局日志实例内存
+    if (g_linx_log_instance) {
+        return -1;
+    }
+
     g_linx_log_instance = (linx_log_t *)malloc(sizeof(linx_log_t));
     if (g_linx_log_instance == NULL) {
         return -1;
@@ -241,6 +245,8 @@ int linx_log_init(const char *log_file, const char *log_level)
         } else {
             g_linx_log_instance->log_file = fopen(log_file, "a");  // 追加模式打开文件
             if (g_linx_log_instance->log_file == NULL) {
+                free(g_linx_log_instance);
+                g_linx_log_instance = NULL;
                 return -1;
             }
         }
@@ -255,6 +261,11 @@ int linx_log_init(const char *log_file, const char *log_level)
     g_linx_log_instance->queue_size = 0;
 
     // 创建单线程的日志线程池
+    if (g_log_thread_pool) {
+        linx_log_deinit();
+        return -1;
+    }
+
     g_log_thread_pool = linx_thread_pool_create(1);
     if (g_log_thread_pool == NULL) {
         linx_log_deinit();  // 失败时清理资源
@@ -286,9 +297,17 @@ int linx_log_init(const char *log_file, const char *log_level)
  */
 void linx_log_deinit(void)
 {
+    if (!g_log_thread_pool) {
+        return;
+    }
+
     /* 强制销毁日志线程池，等待所有任务完成 */
     linx_thread_pool_destroy(g_log_thread_pool, 1);
     g_log_thread_pool = NULL;
+
+    if (!g_linx_log_instance) {
+        return;
+    }
 
     /* 关闭日志文件（如果是非stderr的独立文件） */
     if (g_linx_log_instance->log_file &&
@@ -310,6 +329,7 @@ void linx_log_deinit(void)
 
     /* 释放日志实例结构体内存 */
     free(g_linx_log_instance);
+    g_linx_log_instance = NULL;
 }
 
 /**

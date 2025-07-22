@@ -17,7 +17,9 @@ SRCS := $(wildcard $(SRC_DIR)/*.c $(SRC_DIR)/*/*.c)
 OBJS := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/$(MODULE_NAME)/%.o,$(SRCS))
 
 # 添加包含路径
-CFLAGS += -I$(INCLUDE_DIR) -I$(TOPDIR)/include
+CFLAGS += -I$(INCLUDE_DIR) -I$(TOPDIR)/include \
+		  -I$(SRC_DIR)/ebpf/include \
+		  -I$(KERNEL_DIR)/ebpf/include
 
 .PHONY: all clean
 

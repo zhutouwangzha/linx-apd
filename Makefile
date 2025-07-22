@@ -5,6 +5,7 @@ LIB_DIR := $(BUILD_DIR)/lib
 BIN_DIR := $(BUILD_DIR)/bin
 OBJ_DIR := $(BUILD_DIR)/obj
 USR_DIR := $(TOPDIR)/userspace
+KERNEL_DIR := $(TOPDIR)/kernel
 DEPENDS_DIR := $(TOPDIR)/local_depends
 
 LINX_APD_DIR := $(USR_DIR)/linx_apd
@@ -26,11 +27,12 @@ INCLUDE := -I$(TOPDIR)/include -I$(USR_DIR)/linx_arg_parser/include \
 			-I$(USR_DIR)/linx_thread/include/ \
 			-I$(USR_DIR)/linx_process_cache/include/ \
 			-I$(USR_DIR)/linx_apd/include/ \
-			-I$(USR_DIR)/linx_hash_map/include
+			-I$(USR_DIR)/linx_hash_map/include \
+			-I$(DEPENDS_DIR)/uthash/include
 
 CFLAGS 	:= -Wall -Wextra -g $(INCLUDE) \
 		   -DPCRE2_CODE_UNIT_WIDTH=8		# 这是pcre2库的编译选项，指定UTF8编码
-LDFLAGS := -lpthread -lyaml -lpcre2-8
+LDFLAGS := -lpthread -lyaml -lpcre2-8 -lbpf
 
 # 三方库目录
 LOCAL_LIB_DIR := -L$(DEPENDS_DIR)/libyaml/libs \
@@ -46,22 +48,29 @@ LIBRARY_DIRS := $(filter-out $(LINX_APD_DIR), \
 LIBRARIES := $(addprefix $(LIB_DIR)/lib,$(addprefix .a,$(notdir $(LIBRARY_DIRS)))))
 LINK_LIBS := $(addprefix -l,$(notdir $(LIBRARY_DIRS)))
 
+# ebpf 模块目录
+EBPF_DIR := $(KERNEL_DIR)/ebpf
+
 # 主程序文件
 LINX_APD_SRCS := $(wildcard $(LINX_APD_DIR)/*.c)
 LINX_APD_OBJS := $(patsubst $(LINX_APD_DIR)/%.c, $(OBJ_DIR)/linx_apd/%.o, $(LINX_APD_SRCS))
 EXECUTABLE := $(BIN_DIR)/linx-apd
 
-export TOPDIR CC CFLAGS LDFLAGS BUILD_DIR DEPENDS_DIR USR_DIR
+export TOPDIR CC CFLAGS LDFLAGS BUILD_DIR DEPENDS_DIR USR_DIR KERNEL_DIR EBPF_DIR
 
-.PHONY: all clean $(LIBRARY_DIRS)
+.PHONY: all clean $(LIBRARY_DIRS) ebpf
 
-all: $(EXECUTABLE)
+all: ebpf $(EXECUTABLE)
+
+ebpf: $(EBPF_DIR)
+	@echo "[Build module]: $^"
+	@$(MAKE) --no-print-directory -C $^
 
 # 链接可执行文件
 $(EXECUTABLE): $(LIBRARIES) $(LINX_APD_OBJS)
 	@echo "[Link]: $@"
 	@mkdir -p $(dir $@)
-	@$(CC) $(CFLAGS) $(LINX_APD_OBJS) -L$(LIB_DIR) $(LOCAL_LIB_DIR) $(LINK_LIBS) $(LDFLAGS) -o $@
+	$(CC) $(CFLAGS) $(LINX_APD_OBJS) -L$(LIB_DIR) $(LOCAL_LIB_DIR) -Wl,--start-group $(LINK_LIBS) $(LDFLAGS) -Wl,--end-group -o $@
 
 # 编译主程序
 $(OBJ_DIR)/linx_apd/%.o: $(LINX_APD_DIR)/%.c
@@ -84,6 +93,8 @@ clean:
 		echo "[Cleaning module]: $$(basename $$dir)"; \
 		$(MAKE) --no-print-directory -C $$dir clean; \
 	done
+	@echo "[Cleaning module]: $(basename $(EBPF_DIR))"
+	@$(MAKE) --no-print-directory -C $(EBPF_DIR) clean
 	@rm -rf $(OBJ_DIR)/linx_apd
 	@rm -rf $(BUILD_DIR)
 	@echo "[Clea complete]"

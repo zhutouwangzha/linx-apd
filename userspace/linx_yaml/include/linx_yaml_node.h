@@ -24,7 +24,7 @@ linx_yaml_node_t *linx_yaml_node_create(linx_yaml_node_type_t type, const char *
 
 void linx_yaml_node_free(linx_yaml_node_t *node);
 
-void linx_yaml_node_add_child(linx_yaml_node_t *parent, linx_yaml_node_t *child);
+int linx_yaml_node_add_child(linx_yaml_node_t *parent, linx_yaml_node_t *child);
 
 linx_yaml_node_t *linx_yaml_node_find_by_key(linx_yaml_node_t *node, const char *key);
 

@@ -15,4 +15,6 @@ bool num_lt_matcher(void *context);
 
 bool num_le_matcher(void *context);
 
+bool str_assign_matcher(void *context);
+
 #endif /* __RULE_MATCH_FUNC_H__ */

@@ -2,19 +2,23 @@
 #define __LINX_RULE_ENGINE_LOAD_H__ 
 
 typedef struct {
-    const char *name;
-    const char *desc;
-    const char *condition;
-    const char *output;
-    const char *priority;
-    const char **tags;
-    const char *chdesc;
+    char *name;
+    char *desc;
+    char *condition;
+    char *output;
+    char *priority;
+    char **tags;
+    char *chdesc;
     struct {
-        const char *title;
-        const char *content;
+        char *title;
+        char *content;
     } notify;
 } linx_rule_t;
 
 int linx_rule_engine_load(const char *rules_file_path);
+
+linx_rule_t *linx_rule_create(void);
+
+void linx_rule_destroy(linx_rule_t *rule);
 
 #endif /* __LINX_RULE_ENGINE_LOAD_H__ */
