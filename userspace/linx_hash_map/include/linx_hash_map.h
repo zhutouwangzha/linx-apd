@@ -41,6 +41,35 @@ field_result_t linx_hash_map_get_field(const char *table_name, const char *field
 
 field_result_t linx_hash_map_get_field_by_path(char *path);
 
+/* 新增：更新指定表的基地址 */
+int linx_hash_map_update_base_addr(const char *table_name, void *new_base_addr);
+
+/* 新增：获取指定表的基地址 */
+void *linx_hash_map_get_base_addr(const char *table_name);
+
+/* 新增：列出所有表名 */
+int linx_hash_map_list_tables(char ***table_names, size_t *count);
+
+/* 新增：释放表名列表 */
+void linx_hash_map_free_table_list(char **table_names, size_t count);
+
+/* 新增：根据表名和field_result获取实际值指针（自动使用表的基地址） */
+static inline void *linx_hash_map_get_table_value_ptr(const char *table_name, const field_result_t *field)
+{
+    void *base_addr;
+    
+    if (!field->found || !table_name) {
+        return NULL;
+    }
+    
+    base_addr = linx_hash_map_get_base_addr(table_name);
+    if (!base_addr) {
+        return NULL;
+    }
+    
+    return (void *)((char *)base_addr + field->offset);
+}
+
 /* 新增：根据基地址和field_result获取实际值指针 */
 static inline void *linx_hash_map_get_value_ptr(void *base_addr, const field_result_t *field)
 {

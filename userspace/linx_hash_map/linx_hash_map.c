@@ -1,4 +1,6 @@
 #include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "linx_hash_map.h"
 
@@ -49,7 +51,7 @@ void linx_hash_map_deinit(void)
 {
     field_table_t *current_table, *tmp_table;
 
-    if (s_linx_hash_map != NULL) {
+    if (s_linx_hash_map == NULL) {
         return;
     }
 
@@ -195,4 +197,100 @@ field_result_t linx_hash_map_get_field_by_path(char *path)
     }
 
     return linx_hash_map_get_field(table_name, field_name);
+}
+
+/* 更新指定表的基地址 */
+int linx_hash_map_update_base_addr(const char *table_name, void *new_base_addr)
+{
+    field_table_t *table;
+
+    if (!s_linx_hash_map || !table_name) {
+        return -1;
+    }
+
+    HASH_FIND_STR(s_linx_hash_map->tables, table_name, table);
+    if (!table) {
+        return -1;  /* 表不存在 */
+    }
+
+    table->base_addr = new_base_addr;
+    return 0;
+}
+
+/* 获取指定表的基地址 */
+void *linx_hash_map_get_base_addr(const char *table_name)
+{
+    field_table_t *table;
+
+    if (!s_linx_hash_map || !table_name) {
+        return NULL;
+    }
+
+    HASH_FIND_STR(s_linx_hash_map->tables, table_name, table);
+    if (!table) {
+        return NULL;  /* 表不存在 */
+    }
+
+    return table->base_addr;
+}
+
+/* 列出所有表名 */
+int linx_hash_map_list_tables(char ***table_names, size_t *count)
+{
+    field_table_t *current_table, *tmp_table;
+    char **names;
+    size_t table_count = 0;
+    size_t index = 0;
+
+    if (!s_linx_hash_map || !table_names || !count) {
+        return -1;
+    }
+
+    /* 首先计算表的数量 */
+    HASH_ITER(hh, s_linx_hash_map->tables, current_table, tmp_table) {
+        table_count++;
+    }
+
+    if (table_count == 0) {
+        *table_names = NULL;
+        *count = 0;
+        return 0;
+    }
+
+    /* 分配内存存储表名指针 */
+    names = (char **)malloc(table_count * sizeof(char *));
+    if (!names) {
+        return -1;
+    }
+
+    /* 复制表名 */
+    HASH_ITER(hh, s_linx_hash_map->tables, current_table, tmp_table) {
+        names[index] = strdup(current_table->table_name);
+        if (!names[index]) {
+            /* 清理已分配的内存 */
+            for (size_t i = 0; i < index; i++) {
+                free(names[i]);
+            }
+            free(names);
+            return -1;
+        }
+        index++;
+    }
+
+    *table_names = names;
+    *count = table_count;
+    return 0;
+}
+
+/* 释放表名列表 */
+void linx_hash_map_free_table_list(char **table_names, size_t count)
+{
+    if (!table_names) {
+        return;
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        free(table_names[i]);
+    }
+    free(table_names);
 }
