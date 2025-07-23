@@ -174,13 +174,13 @@ int linx_event_processor_set_profiling(linx_event_processor_t *processor,
 ### 线程池配置
 ```c
 typedef struct {
-    uint32_t min_threads;           // 最小线程数
-    uint32_t max_threads;           // 最大线程数
-    uint32_t idle_timeout_ms;       // 空闲超时时间
+    uint32_t thread_count;          // 线程数量
     bool cpu_affinity;              // 是否启用CPU亲和性
     int priority;                   // 线程优先级
 } linx_thread_pool_config_t;
 ```
+
+**注意**: 本模块使用现有的 `linx_thread_pool` 实现，配置已简化以适配现有接口。
 
 ### 队列配置
 ```c

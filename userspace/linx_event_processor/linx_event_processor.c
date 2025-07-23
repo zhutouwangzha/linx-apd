@@ -26,6 +26,21 @@
 #define LINX_MEMORY_ALIGNMENT       64
 #define LINX_CACHE_LINE_SIZE        64
 
+/* 任务类型定义 */
+typedef enum {
+    LINX_TASK_TYPE_FETCH_EVENT,
+    LINX_TASK_TYPE_MATCH_EVENT,
+    LINX_TASK_TYPE_SHUTDOWN
+} linx_task_type_t;
+
+/* 任务参数结构 */
+typedef struct {
+    linx_task_type_t type;
+    linx_event_processor_t *processor;
+    linx_event_wrapper_t *event_wrapper;
+    int worker_id;
+} linx_task_arg_t;
+
 /* 内部工具函数 */
 static inline uint64_t get_timestamp_ns(void)
 {
@@ -55,6 +70,21 @@ static inline int set_cpu_affinity(int cpu_id)
     CPU_ZERO(&cpuset);
     CPU_SET(cpu_id, &cpuset);
     return pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+}
+
+/* 设置错误信息 */
+static void set_last_error(linx_event_processor_t *processor, const char *error)
+{
+    if (!processor || !error) return;
+    
+    pthread_mutex_lock(&processor->error_mutex);
+    strncpy(processor->last_error, error, sizeof(processor->last_error) - 1);
+    processor->last_error[sizeof(processor->last_error) - 1] = '\0';
+    pthread_mutex_unlock(&processor->error_mutex);
+    
+    if (processor->config.error_callback) {
+        processor->config.error_callback(error);
+    }
 }
 
 /* 内存池实现 */
@@ -269,226 +299,19 @@ static linx_event_wrapper_t *event_queue_dequeue(linx_event_queue_t *queue, uint
     return wrapper;
 }
 
-/* 高级线程池实现 */
-static void *advanced_worker_thread(void *arg)
-{
-    linx_worker_thread_t *worker = (linx_worker_thread_t *)arg;
-    linx_event_processor_t *processor = (linx_event_processor_t *)worker->processor_ctx;
-    char thread_name[16];
-    
-    snprintf(thread_name, sizeof(thread_name), "linx_worker_%u", worker->worker_id);
-    set_thread_name(thread_name);
-    
-    /* 设置CPU亲和性 */
-    if (worker->cpu_core >= 0) {
-        set_cpu_affinity(worker->cpu_core);
-    }
-    
-    pthread_mutex_lock(&worker->state_mutex);
-    worker->running = true;
-    worker->last_activity_timestamp = get_timestamp_us();
-    pthread_mutex_unlock(&worker->state_mutex);
-    
-    LINX_LOG_INFO("Worker thread %u started on CPU %d", worker->worker_id, worker->cpu_core);
-    
-    while (!worker->should_stop) {
-        uint64_t start_time = get_timestamp_ns();
-        
-        /* 获取任务 */
-        linx_event_wrapper_t *wrapper = event_queue_dequeue(
-            processor->processing_queue, 1000);  /* 1秒超时 */
-        
-        if (!wrapper) {
-            continue;
-        }
-        
-        /* 执行规则匹配 */
-        if (processor->matcher_pool->worker_func) {
-            processor->matcher_pool->worker_func(wrapper);
-        }
-        
-        /* 更新统计信息 */
-        uint64_t processing_time = get_timestamp_ns() - start_time;
-        
-        pthread_mutex_lock(&worker->state_mutex);
-        worker->events_processed++;
-        worker->processing_time_ns += processing_time;
-        worker->last_activity_timestamp = get_timestamp_us();
-        pthread_mutex_unlock(&worker->state_mutex);
-        
-        /* 释放事件包装器 */
-        memory_pool_free(processor->wrapper_pool, wrapper);
-    }
-    
-    pthread_mutex_lock(&worker->state_mutex);
-    worker->running = false;
-    pthread_mutex_unlock(&worker->state_mutex);
-    
-    LINX_LOG_INFO("Worker thread %u stopped", worker->worker_id);
-    return NULL;
-}
-
-static linx_advanced_thread_pool_t *advanced_thread_pool_create(
-    const linx_thread_pool_config_t *config, 
-    void *(*worker_func)(void *))
-{
-    linx_advanced_thread_pool_t *pool = calloc(1, sizeof(linx_advanced_thread_pool_t));
-    if (!pool) return NULL;
-    
-    pool->min_threads = config->min_threads;
-    pool->max_threads = config->max_threads;
-    pool->worker_func = worker_func;
-    pool->load_threshold_high = 80;  /* 80% */
-    pool->load_threshold_low = 20;   /* 20% */
-    
-    if (pthread_mutex_init(&pool->pool_mutex, NULL) != 0 ||
-        pthread_cond_init(&pool->work_available, NULL) != 0) {
-        free(pool);
-        return NULL;
-    }
-    
-    /* 分配工作线程数组 */
-    pool->workers = calloc(pool->max_threads, sizeof(linx_worker_thread_t));
-    if (!pool->workers) {
-        pthread_mutex_destroy(&pool->pool_mutex);
-        pthread_cond_destroy(&pool->work_available);
-        free(pool);
-        return NULL;
-    }
-    
-    return pool;
-}
-
-static void advanced_thread_pool_destroy(linx_advanced_thread_pool_t *pool)
-{
-    if (!pool) return;
-    
-    /* 停止所有工作线程 */
-    for (uint32_t i = 0; i < pool->current_threads; i++) {
-        linx_worker_thread_t *worker = &pool->workers[i];
-        worker->should_stop = true;
-        
-        if (worker->running) {
-            pthread_join(worker->thread_id, NULL);
-        }
-        
-        pthread_mutex_destroy(&worker->state_mutex);
-        pthread_cond_destroy(&worker->wake_cond);
-    }
-    
-    free(pool->workers);
-    pthread_mutex_destroy(&pool->pool_mutex);
-    pthread_cond_destroy(&pool->work_available);
-    free(pool);
-}
-
-static int advanced_thread_pool_start(linx_advanced_thread_pool_t *pool, 
-                                     linx_event_processor_t *processor)
-{
-    if (!pool || !processor) return -1;
-    
-    pthread_mutex_lock(&pool->pool_mutex);
-    
-    uint32_t cpu_count = get_cpu_count();
-    
-    /* 启动最小数量的线程 */
-    for (uint32_t i = 0; i < pool->min_threads; i++) {
-        linx_worker_thread_t *worker = &pool->workers[i];
-        
-        worker->worker_id = i;
-        worker->should_stop = false;
-        worker->running = false;
-        worker->cpu_core = processor->config.fetcher_pool_config.cpu_affinity ? 
-                          (int)(i % cpu_count) : -1;
-        worker->processor_ctx = processor;
-        
-        if (pthread_mutex_init(&worker->state_mutex, NULL) != 0 ||
-            pthread_cond_init(&worker->wake_cond, NULL) != 0) {
-            pthread_mutex_unlock(&pool->pool_mutex);
-            return -1;
-        }
-        
-        if (pthread_create(&worker->thread_id, NULL, advanced_worker_thread, worker) != 0) {
-            pthread_mutex_unlock(&pool->pool_mutex);
-            return -1;
-        }
-        
-        pool->current_threads++;
-    }
-    
-    pthread_mutex_unlock(&pool->pool_mutex);
-    return 0;
-}
-
 /* 事件获取工作函数 */
-static void *event_fetcher_worker(void *arg)
+static void *event_fetch_worker(void *arg, int *should_stop)
 {
-    linx_event_wrapper_t *wrapper = (linx_event_wrapper_t *)arg;
-    linx_event_processor_t *processor = (linx_event_processor_t *)wrapper->context;
+    linx_task_arg_t *task_arg = (linx_task_arg_t *)arg;
+    linx_event_processor_t *processor = task_arg->processor;
+    linx_event_t *raw_event = NULL;
+    int ret;
     
-    /* 执行规则匹配 */
-    bool matched = false;
-    linx_rule_set_t *rule_set = linx_rule_set_get();
+    LINX_LOG_DEBUG("Event fetch worker started");
     
-    if (rule_set && rule_set->size > 0) {
-        for (size_t i = 0; i < rule_set->size; i++) {
-            if (rule_set->data.matches[i]) {
-                /* TODO: 设置当前事件到线程本地存储 */
-                matched = linx_rule_engine_match(rule_set->data.matches[i]);
-                
-                if (matched) {
-                    /* 触发告警 */
-                    if (rule_set->data.outputs[i]) {
-                        char rule_name[64];
-                        snprintf(rule_name, sizeof(rule_name), "rule_%zu", i);
-                        linx_alert_send_async(rule_set->data.outputs[i], rule_name, 1);
-                    }
-                    
-                    /* 更新匹配统计 */
-                    pthread_mutex_lock(&processor->stats_mutex);
-                    processor->stats.total_events_matched++;
-                    pthread_mutex_unlock(&processor->stats_mutex);
-                    
-                    break;  /* 匹配第一个规则即停止 */
-                }
-            }
-        }
-    }
-    
-    /* 更新处理统计 */
-    pthread_mutex_lock(&processor->stats_mutex);
-    processor->stats.total_events_processed++;
-    pthread_mutex_unlock(&processor->stats_mutex);
-    
-    /* 释放事件内存 */
-    if (wrapper->event) {
-        memory_pool_free(processor->event_pool, wrapper->event);
-    }
-    
-    return NULL;
-}
-
-/* 事件获取线程主函数 */
-static void *event_fetch_thread(void *arg)
-{
-    linx_worker_thread_t *worker = (linx_worker_thread_t *)arg;
-    linx_event_processor_t *processor = (linx_event_processor_t *)worker->processor_ctx;
-    
-    set_thread_name("linx_fetcher");
-    
-    if (worker->cpu_core >= 0) {
-        set_cpu_affinity(worker->cpu_core);
-    }
-    
-    LINX_LOG_INFO("Event fetcher thread %u started", worker->worker_id);
-    
-    while (!worker->should_stop && 
-           processor->state == LINX_EVENT_PROC_RUNNING) {
-        
+    while (!*should_stop && !processor->shutdown_requested) {
         /* 从eBPF获取原始事件 */
-        linx_event_t *raw_event = NULL;
-        int ret = linx_ebpf_get_ringbuf_msg(processor->ebpf_manager, &raw_event);
-        
+        ret = linx_ebpf_get_ringbuf_msg(processor->ebpf_manager, &raw_event);
         if (ret != 0 || !raw_event) {
             usleep(1000);  /* 1ms */
             continue;
@@ -540,8 +363,28 @@ static void *event_fetch_thread(void *arg)
         wrapper->retry_count = 0;
         wrapper->context = processor;
         
-        /* 提交到处理队列 */
-        if (event_queue_enqueue(processor->processing_queue, wrapper) != 0) {
+        /* 提交匹配任务到匹配线程池 */
+        linx_task_arg_t *match_task = malloc(sizeof(linx_task_arg_t));
+        if (!match_task) {
+            memory_pool_free(processor->event_pool, processed_event);
+            memory_pool_free(processor->wrapper_pool, wrapper);
+            pthread_mutex_lock(&processor->stats_mutex);
+            processor->stats.allocation_failures++;
+            processor->stats.total_events_dropped++;
+            pthread_mutex_unlock(&processor->stats_mutex);
+            continue;
+        }
+        
+        match_task->type = LINX_TASK_TYPE_MATCH_EVENT;
+        match_task->processor = processor;
+        match_task->event_wrapper = wrapper;
+        match_task->worker_id = task_arg->worker_id;
+        
+        ret = linx_thread_pool_add_task(processor->matcher_pool, 
+                                       event_match_worker, match_task);
+        if (ret != 0) {
+            LINX_LOG_ERROR("Failed to submit match task to thread pool");
+            free(match_task);
             memory_pool_free(processor->event_pool, processed_event);
             memory_pool_free(processor->wrapper_pool, wrapper);
             pthread_mutex_lock(&processor->stats_mutex);
@@ -555,14 +398,67 @@ static void *event_fetch_thread(void *arg)
         pthread_mutex_lock(&processor->stats_mutex);
         processor->stats.total_events_received++;
         pthread_mutex_unlock(&processor->stats_mutex);
-        
-        pthread_mutex_lock(&worker->state_mutex);
-        worker->events_processed++;
-        worker->last_activity_timestamp = get_timestamp_us();
-        pthread_mutex_unlock(&worker->state_mutex);
     }
     
-    LINX_LOG_INFO("Event fetcher thread %u stopped", worker->worker_id);
+    LINX_LOG_DEBUG("Event fetch worker stopped");
+    return NULL;
+}
+
+/* 事件匹配工作函数 */
+static void *event_match_worker(void *arg, int *should_stop)
+{
+    linx_task_arg_t *task_arg = (linx_task_arg_t *)arg;
+    linx_event_processor_t *processor = task_arg->processor;
+    linx_event_wrapper_t *wrapper = task_arg->event_wrapper;
+    bool matched = false;
+    
+    if (!wrapper || !wrapper->event) {
+        LINX_LOG_ERROR("Invalid event wrapper in match worker");
+        free(task_arg);
+        return NULL;
+    }
+    
+    LINX_LOG_DEBUG("Event match worker processing event %lu", wrapper->event->num);
+    
+    /* 执行规则匹配 */
+    linx_rule_set_t *rule_set = linx_rule_set_get();
+    if (rule_set && rule_set->size > 0) {
+        for (size_t i = 0; i < rule_set->size; i++) {
+            if (rule_set->data.matches[i]) {
+                /* TODO: 设置当前事件到线程本地存储 */
+                matched = linx_rule_engine_match(rule_set->data.matches[i]);
+                
+                if (matched) {
+                    /* 触发告警 */
+                    if (rule_set->data.outputs[i]) {
+                        char rule_name[64];
+                        snprintf(rule_name, sizeof(rule_name), "rule_%zu", i);
+                        linx_alert_send_async(rule_set->data.outputs[i], rule_name, 1);
+                    }
+                    
+                    /* 更新匹配统计 */
+                    pthread_mutex_lock(&processor->stats_mutex);
+                    processor->stats.total_events_matched++;
+                    pthread_mutex_unlock(&processor->stats_mutex);
+                    
+                    break;  /* 匹配第一个规则即停止 */
+                }
+            }
+        }
+    }
+    
+    /* 更新处理统计 */
+    pthread_mutex_lock(&processor->stats_mutex);
+    processor->stats.total_events_processed++;
+    pthread_mutex_unlock(&processor->stats_mutex);
+    
+    /* 释放事件内存 */
+    if (wrapper->event) {
+        memory_pool_free(processor->event_pool, wrapper->event);
+    }
+    memory_pool_free(processor->wrapper_pool, wrapper);
+    
+    free(task_arg);
     return NULL;
 }
 
@@ -600,16 +496,30 @@ static void *monitor_thread(void *arg)
             }
             
             /* 更新队列统计 */
-            processor->stats.queue_current_size = processor->processing_queue->count;
-            if (processor->processing_queue->peak_size > processor->stats.queue_peak_size) {
-                processor->stats.queue_peak_size = processor->processing_queue->peak_size;
+            if (processor->processing_queue) {
+                processor->stats.queue_current_size = processor->processing_queue->count;
+                if (processor->processing_queue->peak_size > processor->stats.queue_peak_size) {
+                    processor->stats.queue_peak_size = processor->processing_queue->peak_size;
+                }
             }
             
             /* 更新线程统计 */
-            processor->stats.fetcher_active_threads = processor->fetcher_pool->current_threads;
-            processor->stats.matcher_active_threads = processor->matcher_pool->current_threads;
+            if (processor->fetcher_pool) {
+                processor->stats.fetcher_active_threads = 
+                    linx_thread_pool_get_active_threads(processor->fetcher_pool);
+                processor->stats.fetcher_queue_size = 
+                    linx_thread_pool_get_queue_size(processor->fetcher_pool);
+            }
+            
+            if (processor->matcher_pool) {
+                processor->stats.matcher_active_threads = 
+                    linx_thread_pool_get_active_threads(processor->matcher_pool);
+                processor->stats.matcher_queue_size = 
+                    linx_thread_pool_get_queue_size(processor->matcher_pool);
+            }
             
             processor->stats.last_update_timestamp = current_time;
+            processor->stats.uptime_seconds = (current_time - processor->profiling.start_time) / 1000000;
             
             pthread_mutex_unlock(&processor->stats_mutex);
             
@@ -648,16 +558,12 @@ void linx_event_processor_get_default_config(linx_event_processor_config_t *conf
     config->queue_config.batch_size = LINX_EVENT_PROCESSOR_DEFAULT_BATCH_SIZE;
     
     /* 获取线程池配置 */
-    config->fetcher_pool_config.min_threads = cpu_count;
-    config->fetcher_pool_config.max_threads = cpu_count;
-    config->fetcher_pool_config.idle_timeout_ms = 30000;
+    config->fetcher_pool_config.thread_count = cpu_count;
     config->fetcher_pool_config.cpu_affinity = true;
     config->fetcher_pool_config.priority = 0;
     
     /* 匹配线程池配置 */
-    config->matcher_pool_config.min_threads = cpu_count * 2;
-    config->matcher_pool_config.max_threads = cpu_count * 2;
-    config->matcher_pool_config.idle_timeout_ms = 30000;
+    config->matcher_pool_config.thread_count = cpu_count * 2;
     config->matcher_pool_config.cpu_affinity = true;
     config->matcher_pool_config.priority = 0;
     
@@ -716,6 +622,7 @@ linx_event_processor_t *linx_event_processor_create(const linx_event_processor_c
     /* 初始化状态 */
     processor->state = LINX_EVENT_PROC_STOPPED;
     processor->sequence_counter = 0;
+    processor->shutdown_requested = false;
     
     /* 初始化互斥锁 */
     if (pthread_mutex_init(&processor->state_mutex, NULL) != 0 ||
@@ -743,12 +650,12 @@ linx_event_processor_t *linx_event_processor_create(const linx_event_processor_c
     if (!processor->processing_queue) goto error_cleanup;
     
     /* 创建线程池 */
-    processor->fetcher_pool = advanced_thread_pool_create(
-        &processor->config.fetcher_pool_config, NULL);
+    processor->fetcher_pool = linx_thread_pool_create(
+        processor->config.fetcher_pool_config.thread_count);
     if (!processor->fetcher_pool) goto error_cleanup;
     
-    processor->matcher_pool = advanced_thread_pool_create(
-        &processor->config.matcher_pool_config, event_fetcher_worker);
+    processor->matcher_pool = linx_thread_pool_create(
+        processor->config.matcher_pool_config.thread_count);
     if (!processor->matcher_pool) goto error_cleanup;
     
     LINX_LOG_INFO("Event processor created successfully");
@@ -770,10 +677,10 @@ void linx_event_processor_destroy(linx_event_processor_t *processor)
     
     /* 销毁线程池 */
     if (processor->fetcher_pool) {
-        advanced_thread_pool_destroy(processor->fetcher_pool);
+        linx_thread_pool_destroy(processor->fetcher_pool, 1);
     }
     if (processor->matcher_pool) {
-        advanced_thread_pool_destroy(processor->matcher_pool);
+        linx_thread_pool_destroy(processor->matcher_pool, 1);
     }
     
     /* 销毁队列 */
@@ -816,25 +723,39 @@ int linx_event_processor_start(linx_event_processor_t *processor, linx_ebpf_t *e
     
     processor->state = LINX_EVENT_PROC_STARTING;
     processor->ebpf_manager = ebpf_manager;
+    processor->shutdown_requested = false;
     
     pthread_mutex_unlock(&processor->state_mutex);
     
-    /* 启动获取线程池 */
-    if (advanced_thread_pool_start(processor->fetcher_pool, processor) != 0) {
-        processor->state = LINX_EVENT_PROC_ERROR;
-        return LINX_EVENT_PROC_ERROR_THREAD_CREATE;
-    }
-    
-    /* 启动匹配线程池 */
-    if (advanced_thread_pool_start(processor->matcher_pool, processor) != 0) {
-        processor->state = LINX_EVENT_PROC_ERROR;
-        return LINX_EVENT_PROC_ERROR_THREAD_CREATE;
+    /* 为每个获取线程提交持续运行任务 */
+    for (uint32_t i = 0; i < processor->config.fetcher_thread_count; i++) {
+        linx_task_arg_t *task_arg = malloc(sizeof(linx_task_arg_t));
+        if (!task_arg) {
+            set_last_error(processor, "Failed to allocate memory for fetch task");
+            processor->state = LINX_EVENT_PROC_ERROR;
+            return LINX_EVENT_PROC_ERROR_OUT_OF_MEMORY;
+        }
+        
+        task_arg->type = LINX_TASK_TYPE_FETCH_EVENT;
+        task_arg->processor = processor;
+        task_arg->event_wrapper = NULL;
+        task_arg->worker_id = i;
+        
+        int ret = linx_thread_pool_add_task(processor->fetcher_pool, 
+                                           event_fetch_worker, task_arg);
+        if (ret != 0) {
+            free(task_arg);
+            set_last_error(processor, "Failed to submit fetch task to thread pool");
+            processor->state = LINX_EVENT_PROC_ERROR;
+            return LINX_EVENT_PROC_ERROR_THREAD_CREATE;
+        }
     }
     
     /* 启动监控线程 */
     if (processor->config.monitor_config.enable_metrics) {
         processor->monitor_running = true;
         if (pthread_create(&processor->monitor_thread, NULL, monitor_thread, processor) != 0) {
+            set_last_error(processor, "Failed to create monitor thread");
             processor->state = LINX_EVENT_PROC_ERROR;
             return LINX_EVENT_PROC_ERROR_THREAD_CREATE;
         }
@@ -864,6 +785,7 @@ int linx_event_processor_stop(linx_event_processor_t *processor, uint32_t timeou
     }
     
     processor->state = LINX_EVENT_PROC_STOPPING;
+    processor->shutdown_requested = true;
     pthread_mutex_unlock(&processor->state_mutex);
     
     LINX_LOG_INFO("Stopping event processor...");
@@ -875,15 +797,26 @@ int linx_event_processor_stop(linx_event_processor_t *processor, uint32_t timeou
     }
     
     /* 停止线程池 */
-    advanced_thread_pool_destroy(processor->fetcher_pool);
-    processor->fetcher_pool = NULL;
+    if (processor->fetcher_pool) {
+        linx_thread_pool_destroy(processor->fetcher_pool, 1);
+        processor->fetcher_pool = NULL;
+    }
     
-    advanced_thread_pool_destroy(processor->matcher_pool);
-    processor->matcher_pool = NULL;
+    if (processor->matcher_pool) {
+        linx_thread_pool_destroy(processor->matcher_pool, 1);
+        processor->matcher_pool = NULL;
+    }
+    
+    /* 重新创建线程池以备下次使用 */
+    processor->fetcher_pool = linx_thread_pool_create(
+        processor->config.fetcher_pool_config.thread_count);
+    processor->matcher_pool = linx_thread_pool_create(
+        processor->config.matcher_pool_config.thread_count);
     
     /* 设置状态为已停止 */
     pthread_mutex_lock(&processor->state_mutex);
     processor->state = LINX_EVENT_PROC_STOPPED;
+    processor->shutdown_requested = false;
     pthread_cond_broadcast(&processor->state_cond);
     pthread_mutex_unlock(&processor->state_mutex);
     
@@ -921,6 +854,7 @@ int linx_event_processor_reset_stats(linx_event_processor_t *processor)
     pthread_mutex_lock(&processor->stats_mutex);
     memset(&processor->stats, 0, sizeof(processor->stats));
     processor->stats.last_update_timestamp = get_timestamp_us();
+    processor->profiling.start_time = get_timestamp_ns();
     pthread_mutex_unlock(&processor->stats_mutex);
     
     return LINX_EVENT_PROC_SUCCESS;
@@ -935,4 +869,49 @@ const char *linx_event_processor_get_last_error(linx_event_processor_t *processo
     pthread_mutex_unlock(&processor->error_mutex);
     
     return error;
+}
+
+/* 高级功能的基本实现 */
+int linx_event_processor_pause(linx_event_processor_t *processor)
+{
+    /* TODO: 实现暂停功能 */
+    return LINX_EVENT_PROC_SUCCESS;
+}
+
+int linx_event_processor_resume(linx_event_processor_t *processor)
+{
+    /* TODO: 实现恢复功能 */
+    return LINX_EVENT_PROC_SUCCESS;
+}
+
+int linx_event_processor_flush(linx_event_processor_t *processor, uint32_t timeout_ms)
+{
+    /* TODO: 实现队列刷新功能 */
+    return LINX_EVENT_PROC_SUCCESS;
+}
+
+uint64_t linx_event_processor_gc(linx_event_processor_t *processor)
+{
+    /* TODO: 实现垃圾回收功能 */
+    return 0;
+}
+
+int linx_event_processor_dump_state(linx_event_processor_t *processor, 
+                                   char *buffer, size_t buffer_size)
+{
+    /* TODO: 实现状态导出功能 */
+    return 0;
+}
+
+int linx_event_processor_set_profiling(linx_event_processor_t *processor, bool enable)
+{
+    /* TODO: 实现性能分析控制 */
+    return LINX_EVENT_PROC_SUCCESS;
+}
+
+int linx_event_processor_update_config(linx_event_processor_t *processor, 
+                                      const linx_event_processor_config_t *config)
+{
+    /* TODO: 实现热配置更新 */
+    return LINX_EVENT_PROC_SUCCESS;
 }

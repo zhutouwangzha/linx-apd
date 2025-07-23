@@ -6,6 +6,8 @@
 #include <pthread.h>
 #include <sys/queue.h>
 
+#include "linx_thread_pool.h"
+
 /* 前向声明 */
 typedef struct linx_ebpf_s linx_ebpf_t;
 typedef struct event_s event_t;
@@ -38,9 +40,7 @@ typedef struct {
 
 /* 线程池配置 */
 typedef struct {
-    uint32_t min_threads;           /* 最小线程数 */
-    uint32_t max_threads;           /* 最大线程数 */
-    uint32_t idle_timeout_ms;       /* 空闲超时时间(毫秒) */
+    uint32_t thread_count;          /* 线程数量 */
     bool cpu_affinity;              /* 是否启用CPU亲和性 */
     int priority;                   /* 线程优先级 */
 } linx_thread_pool_config_t;
@@ -138,9 +138,9 @@ typedef struct {
     
     /* 线程池统计 */
     uint32_t fetcher_active_threads;
-    uint32_t fetcher_idle_threads;
+    uint32_t fetcher_queue_size;
     uint32_t matcher_active_threads;
-    uint32_t matcher_idle_threads;
+    uint32_t matcher_queue_size;
     
     /* 队列统计 */
     uint32_t queue_current_size;
@@ -162,49 +162,6 @@ typedef struct {
     uint64_t uptime_seconds;
 } linx_event_processor_stats_t;
 
-/* 工作线程结构 */
-typedef struct {
-    pthread_t thread_id;
-    uint32_t worker_id;
-    bool running;
-    bool should_stop;
-    pthread_mutex_t state_mutex;
-    pthread_cond_t wake_cond;
-    
-    /* CPU亲和性 */
-    int cpu_core;
-    
-    /* 统计信息 */
-    uint64_t events_processed;
-    uint64_t processing_time_ns;
-    uint64_t last_activity_timestamp;
-    
-    void *processor_ctx;            /* 指向处理器上下文 */
-} linx_worker_thread_t;
-
-/* 高级线程池 */
-typedef struct {
-    linx_worker_thread_t *workers;
-    uint32_t min_threads;
-    uint32_t max_threads;
-    uint32_t current_threads;
-    uint32_t active_threads;
-    uint32_t idle_threads;
-    
-    pthread_mutex_t pool_mutex;
-    pthread_cond_t work_available;
-    
-    /* 动态扩缩容 */
-    uint32_t load_threshold_high;
-    uint32_t load_threshold_low;
-    uint64_t last_resize_timestamp;
-    
-    /* 任务队列 */
-    linx_event_queue_t *task_queue;
-    
-    void *(*worker_func)(void *arg);
-} linx_advanced_thread_pool_t;
-
 /* 主处理器结构 */
 typedef struct linx_event_processor {
     /* 配置 */
@@ -215,9 +172,9 @@ typedef struct linx_event_processor {
     pthread_mutex_t state_mutex;
     pthread_cond_t state_cond;
     
-    /* 线程池 */
-    linx_advanced_thread_pool_t *fetcher_pool;
-    linx_advanced_thread_pool_t *matcher_pool;
+    /* 线程池 - 使用现有的linx_thread_pool */
+    linx_thread_pool_t *fetcher_pool;
+    linx_thread_pool_t *matcher_pool;
     
     /* 事件队列 */
     linx_event_queue_t *input_queue;       /* 输入队列 */
@@ -255,6 +212,9 @@ typedef struct linx_event_processor {
         uint64_t fetch_cycles;
         uint64_t match_cycles;
     } profiling;
+    
+    /* 运行时状态 */
+    volatile bool shutdown_requested;
     
 } linx_event_processor_t;
 

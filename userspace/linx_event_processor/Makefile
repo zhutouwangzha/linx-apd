@@ -13,6 +13,7 @@ TEST_DIR = tests
 
 # 包含路径
 INCLUDES = -I$(INCLUDE_DIR) \
+           -I../linx_thread/include \
            -I../linx_log/include \
            -I../linx_rule_engine/rule_engine_set/include \
            -I../linx_rule_engine/rule_engine_match/include \
@@ -33,7 +34,8 @@ SIMPLE_EXAMPLE_OBJECTS = $(SIMPLE_EXAMPLE_SOURCES:%.c=$(OBJ_DIR)/%.o)
 ADVANCED_EXAMPLE_OBJECTS = $(ADVANCED_EXAMPLE_SOURCES:%.c=$(OBJ_DIR)/%.o)
 
 # 库文件（如果需要链接外部库）
-LIBS = -L../linx_log -llinx_log \
+LIBS = -L../linx_thread -llinx_thread \
+       -L../linx_log -llinx_log \
        -L../linx_rule_engine/rule_engine_set -llinx_rule_engine_set \
        -L../linx_rule_engine/rule_engine_match -llinx_rule_engine_match \
        -L../linx_alert -llinx_alert \
