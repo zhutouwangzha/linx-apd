@@ -1,6 +1,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
 #include "linx_hash_map.h"
 
@@ -28,6 +29,10 @@ static void destroy_field_table(field_table_t *table)
 
     destroy_field_info(table->fields);
     free(table->table_name);
+    
+    /* 销毁读写锁 */
+    pthread_rwlock_destroy(&table->rwlock);
+    
     free(table);
 }
 
@@ -85,6 +90,13 @@ int linx_hash_map_create_table(const char *table_name, void *base_addr)
     new_table->table_name = strdup(table_name);
     new_table->fields = NULL;
     new_table->base_addr = base_addr;  /* 可以为NULL，表示延迟绑定 */
+    
+    /* 初始化读写锁 */
+    if (pthread_rwlock_init(&new_table->rwlock, NULL) != 0) {
+        free(new_table->table_name);
+        free(new_table);
+        return -1;
+    }
 
     HASH_ADD_STR(s_linx_hash_map->tables, table_name, new_table);
 
@@ -293,4 +305,77 @@ void linx_hash_map_free_table_list(char **table_names, size_t count)
         free(table_names[i]);
     }
     free(table_names);
+}
+
+/* ========== 线程安全API实现 ========== */
+
+/* 获取线程安全的数据访问上下文（读锁） */
+access_context_t linx_hash_map_lock_table_read(const char *table_name)
+{
+    access_context_t context = {0};
+    field_table_t *table;
+
+    if (!s_linx_hash_map || !table_name) {
+        return context;
+    }
+
+    HASH_FIND_STR(s_linx_hash_map->tables, table_name, table);
+    if (!table) {
+        return context;
+    }
+
+    /* 获取读锁 */
+    if (pthread_rwlock_rdlock(&table->rwlock) != 0) {
+        return context;
+    }
+
+    /* 在锁保护下获取基地址快照 */
+    context.base_addr = table->base_addr;
+    context.table = table;
+    context.locked = true;
+
+    return context;
+}
+
+/* 释放数据访问上下文（解锁） */
+void linx_hash_map_unlock_context(access_context_t *context)
+{
+    if (!context || !context->locked || !context->table) {
+        return;
+    }
+
+    pthread_rwlock_unlock(&context->table->rwlock);
+    
+    /* 清理上下文 */
+    context->base_addr = NULL;
+    context->table = NULL;
+    context->locked = false;
+}
+
+/* 原子更新基地址（需要写锁） */
+int linx_hash_map_update_base_addr_safe(const char *table_name, void *new_base_addr)
+{
+    field_table_t *table;
+
+    if (!s_linx_hash_map || !table_name) {
+        return -1;
+    }
+
+    HASH_FIND_STR(s_linx_hash_map->tables, table_name, table);
+    if (!table) {
+        return -1;  /* 表不存在 */
+    }
+
+    /* 获取写锁 */
+    if (pthread_rwlock_wrlock(&table->rwlock) != 0) {
+        return -1;
+    }
+
+    /* 在锁保护下更新基地址 */
+    table->base_addr = new_base_addr;
+
+    /* 释放写锁 */
+    pthread_rwlock_unlock(&table->rwlock);
+
+    return 0;
 }

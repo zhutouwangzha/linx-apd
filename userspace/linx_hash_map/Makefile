@@ -18,6 +18,7 @@ OBJS := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/$(MODULE_NAME)/%.o,$(SRCS))
 
 # 示例程序
 EXAMPLE_MULTI_STRUCT := $(BUILD_DIR)/bin/example_multi_struct
+EXAMPLE_THREAD_SAFE := $(BUILD_DIR)/bin/example_thread_safe
 
 # 添加包含路径
 CFLAGS += -I$(INCLUDE_DIR) -I../../local_depends/uthash/include
@@ -26,7 +27,7 @@ CFLAGS += -I$(INCLUDE_DIR) -I../../local_depends/uthash/include
 
 all: $(LIBRARY)
 
-examples: $(EXAMPLE_MULTI_STRUCT)
+examples: $(EXAMPLE_MULTI_STRUCT) $(EXAMPLE_THREAD_SAFE)
 
 $(LIBRARY): $(OBJS)
 	@mkdir -p $(dir $@)
@@ -43,7 +44,13 @@ $(EXAMPLE_MULTI_STRUCT): $(SRC_DIR)/example_multi_struct.c $(LIBRARY)
 	@echo "[CC example]: $<"
 	@$(CC) $(CFLAGS) $< -L$(LIB_DIR) -l$(MODULE_NAME) -o $@
 
+$(EXAMPLE_THREAD_SAFE): $(SRC_DIR)/example_thread_safe.c $(LIBRARY)
+	@mkdir -p $(dir $@)
+	@echo "[CC thread-safe example]: $<"
+	@$(CC) $(CFLAGS) $< -L$(LIB_DIR) -l$(MODULE_NAME) -lpthread -o $@
+
 clean:
 	@rm -f $(LIBRARY)
 	@rm -f $(EXAMPLE_MULTI_STRUCT)
+	@rm -f $(EXAMPLE_THREAD_SAFE)
 	@rm -rf $(OBJ_DIR)/$(MODULE_NAME)
