@@ -14,6 +14,7 @@ typedef struct {
     field_result_t field;
     const char *str;
     size_t str_len;
+    void *base_addr;    /* 动态基地址 */
 } str_context_t;
 
 typedef struct {
@@ -22,6 +23,7 @@ typedef struct {
         long long int_val;
         long double double_val;
     } number;
+    void *base_addr;    /* 动态基地址 */
 } num_context_t;
 
 typedef struct {

@@ -66,23 +66,23 @@ int linx_hash_map_create_table(const char *table_name, void *base_addr)
 {
     field_table_t *existing_table, *new_table;
 
-    if (s_linx_hash_map == NULL || table_name == NULL || base_addr == NULL) {
+    if (s_linx_hash_map == NULL || table_name == NULL) {
         return -1;
     }
 
     HASH_FIND_STR(s_linx_hash_map->tables, table_name, existing_table);
-    if (existing_table != NULL) {
+    if (existing_table) {
         return -1;
     }
 
-    new_table = (field_table_t *)malloc(sizeof(field_table_t));
+    new_table = malloc(sizeof(field_table_t));
     if (new_table == NULL) {
         return -1;
     }
 
     new_table->table_name = strdup(table_name);
-    new_table->base_addr = base_addr;
     new_table->fields = NULL;
+    new_table->base_addr = base_addr;  /* 可以为NULL，表示延迟绑定 */
 
     HASH_ADD_STR(s_linx_hash_map->tables, table_name, new_table);
 
@@ -164,7 +164,7 @@ field_result_t linx_hash_map_get_field(const char *table_name, const char *field
         return result;
     }
 
-    result.value_ptr = (void *)((char *)table->base_addr + field->offset);
+    result.offset = field->offset;
     result.type = field->type;
     result.size = field->size;
     result.found = true;

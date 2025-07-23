@@ -154,55 +154,56 @@ int linx_output_match_compile(linx_output_match_t **match, char *format)
     return 0;
 }
 
-static size_t format_field_value(segment_t *segment, char *buffer, size_t buffer_size, size_t total_length)
+static size_t format_field_value(segment_t *segment, void *base_addr, char *buffer, size_t buffer_size, size_t total_length)
 {
     size_t field_str_len = 0;
     char field_str[256] = {0};
     field_result_t *field = &segment->data.variable;
+    void *value_ptr = linx_hash_map_get_value_ptr(base_addr, field);
 
-    if (!field->found || field->value_ptr == NULL) {
+    if (!field->found || value_ptr == NULL) {
         return field_str_len;
     }
 
     switch (field->type) {
     case FIELD_TYPE_INT8:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%hhd", *(int8_t *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%hhd", *(int8_t *)value_ptr);
         break;
     case FIELD_TYPE_UINT8:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%hhu", *(uint8_t *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%hhu", *(uint8_t *)value_ptr);
         break;
     case FIELD_TYPE_INT16:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%hd", *(int16_t *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%hd", *(int16_t *)value_ptr);
         break;
     case FIELD_TYPE_UINT16:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%hu", *(uint16_t *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%hu", *(uint16_t *)value_ptr);
         break;
     case FIELD_TYPE_INT32:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%d", *(int32_t *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%d", *(int32_t *)value_ptr);
         break;
     case FIELD_TYPE_UINT32:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%u", *(uint32_t *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%u", *(uint32_t *)value_ptr);
         break;
     case FIELD_TYPE_INT64:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%ld", *(int64_t *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%ld", *(int64_t *)value_ptr);
         break;
     case FIELD_TYPE_UINT64:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%lu", *(uint64_t *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%lu", *(uint64_t *)value_ptr);
         break;
     case FIELD_TYPE_CHARBUF:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%s", (char *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%s", (char *)value_ptr);
         break;
     case FILED_TYPE_CHARBUF_ARRAY:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%s", (char *)(*(uint64_t *)field->value_ptr));
+        field_str_len = snprintf(field_str, sizeof(field_str), "%s", (char *)(*(uint64_t *)value_ptr));
         break;
     case FIELD_TYPE_BOOL:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%s", *(bool *)field->value_ptr ? "true" : "false");
+        field_str_len = snprintf(field_str, sizeof(field_str), "%s", *(bool *)value_ptr ? "true" : "false");
         break;
     case FIELD_TYPE_FLOAT:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%f", *(float *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%f", *(float *)value_ptr);
         break;
     case FIELD_TYPE_DOUBLE:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%lf", *(double *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%lf", *(double *)value_ptr);
         break;
     default:
         break;
@@ -247,7 +248,46 @@ int linx_output_match_format(linx_output_match_t *match, char *buffer, size_t bu
             strncat(buffer + total_length, segment->data.literal.text, literal_len);
             total_length += literal_len;
         } else if (segment->type == SEGMENT_TYPE_VARIABLE) {
-            field_len = format_field_value(segment, buffer, buffer_size, total_length);
+            field_len = format_field_value(segment, NULL, buffer, buffer_size, total_length);
+            if (field_len == 0) {
+                continue;
+            }
+
+            total_length += field_len;
+        }
+    }
+
+    return total_length;
+}
+
+int linx_output_match_format_with_base(linx_output_match_t *match, void *base_addr, char *buffer, size_t buffer_size)
+{
+    size_t total_length = 0;
+    size_t literal_len, field_len;
+    segment_t *segment;
+
+    if (match == NULL || buffer == NULL || buffer_size == 0 || base_addr == NULL) {
+        return -1;
+    }
+
+    buffer[0] = '\0';
+
+    for (size_t i = 0; i < match->size; i++) { 
+        segment = match->segments[i];
+        if (segment == NULL) {
+            continue;
+        }
+
+        if (segment->type == SEGMENT_TYPE_LITERAL) {
+            literal_len = segment->data.literal.length;
+            if (total_length + literal_len >= buffer_size - 1) {
+                return -1;
+            }
+
+            strncat(buffer + total_length, segment->data.literal.text, literal_len);
+            total_length += literal_len;
+        } else if (segment->type == SEGMENT_TYPE_VARIABLE) {
+            field_len = format_field_value(segment, base_addr, buffer, buffer_size, total_length);
             if (field_len == 0) {
                 continue;
             }
