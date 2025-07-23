@@ -37,28 +37,44 @@ bool or_matcher(void *context)
 bool num_gt_matcher(void *context)
 {
     num_context_t *ctx = (num_context_t *)context;
-    long long value = (long long)(*(uint64_t *)ctx->field.value_ptr);
+    void *value_ptr = linx_hash_map_get_value_ptr(ctx->base_addr, &ctx->field);
+    if (!value_ptr) {
+        return false;
+    }
+    long long value = (long long)(*(uint64_t *)value_ptr);
     return value > ctx->number.int_val;
 }
 
 bool num_ge_matcher(void *context)
 {
     num_context_t *ctx = (num_context_t *)context;
-    long long value = (long long)(*(uint64_t *)ctx->field.value_ptr);
+    void *value_ptr = linx_hash_map_get_value_ptr(ctx->base_addr, &ctx->field);
+    if (!value_ptr) {
+        return false;
+    }
+    long long value = (long long)(*(uint64_t *)value_ptr);
     return value >= ctx->number.int_val;
 }
 
 bool num_lt_matcher(void *context)
 {
     num_context_t *ctx = (num_context_t *)context;
-    long long value = (long long)(*(uint64_t *)ctx->field.value_ptr);
+    void *value_ptr = linx_hash_map_get_value_ptr(ctx->base_addr, &ctx->field);
+    if (!value_ptr) {
+        return false;
+    }
+    long long value = (long long)(*(uint64_t *)value_ptr);
     return value < ctx->number.int_val;
 }
 
 bool num_le_matcher(void *context)
 {
     num_context_t *ctx = (num_context_t *)context;
-    long long value = (long long)(*(uint64_t *)ctx->field.value_ptr);
+    void *value_ptr = linx_hash_map_get_value_ptr(ctx->base_addr, &ctx->field);
+    if (!value_ptr) {
+        return false;
+    }
+    long long value = (long long)(*(uint64_t *)value_ptr);
     return value <= ctx->number.int_val;
 }
 
@@ -66,6 +82,10 @@ bool str_assign_matcher(void *context)
 {
     int ret;
     str_context_t *ctx = (str_context_t *)context;
+    void *value_ptr = linx_hash_map_get_value_ptr(ctx->base_addr, &ctx->field);
+    if (!value_ptr) {
+        return false;
+    }
     
     if (ctx->field.size != ctx->str_len) {
         return false;
@@ -73,13 +93,13 @@ bool str_assign_matcher(void *context)
 
     switch (ctx->field.type) {
     case FIELD_TYPE_CHARBUF:
-        ret = strncmp(ctx->field.value_ptr, ctx->str, ctx->field.size);
+        ret = strncmp(value_ptr, ctx->str, ctx->field.size);
         break;
     case FILED_TYPE_CHARBUF_ARRAY: 
-        ret = strncmp((char *)(*(uint64_t *)ctx->field.value_ptr), ctx->str, ctx->field.size);
+        ret = strncmp((char *)(*(uint64_t *)value_ptr), ctx->str, ctx->field.size);
         break;
     default:
-        break;
+        return false;
     }
 
     return (ret == 0) ? true : false;

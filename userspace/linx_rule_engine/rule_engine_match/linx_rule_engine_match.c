@@ -378,3 +378,42 @@ bool linx_rule_engine_match(linx_rule_match_t *match)
 {
     return match->func(match->context);
 }
+
+void linx_rule_engine_match_set_base(linx_rule_match_t *match, void *base_addr)
+{
+    if (!match || !match->context) {
+        return;
+    }
+
+    switch (match->type) {
+    case MATCH_CONTEXT_NUM:
+        ((num_context_t *)match->context)->base_addr = base_addr;
+        break;
+    case MATCH_CONTEXT_STR:
+        ((str_context_t *)match->context)->base_addr = base_addr;
+        break;
+    case MATCH_CONTEXT_LOGIC:
+        {
+            logic_context_t *logic = (logic_context_t *)match->context;
+            if (logic->left) {
+                linx_rule_engine_match_set_base((linx_rule_match_t *)logic->left, base_addr);
+            }
+            if (logic->right) {
+                linx_rule_engine_match_set_base((linx_rule_match_t *)logic->right, base_addr);
+            }
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+bool linx_rule_engine_match_with_base(linx_rule_match_t *match, void *base_addr)
+{
+    if (!match) {
+        return false;
+    }
+    
+    linx_rule_engine_match_set_base(match, base_addr);
+    return match->func(match->context);
+}

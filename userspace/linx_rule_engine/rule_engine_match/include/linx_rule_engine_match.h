@@ -14,4 +14,10 @@ void linx_rule_engine_match_destroy(linx_rule_match_t *match);
 
 bool linx_rule_engine_match(linx_rule_match_t *match);
 
+/* 新增：使用动态基地址进行匹配 */
+bool linx_rule_engine_match_with_base(linx_rule_match_t *match, void *base_addr);
+
+/* 新增：为match设置基地址（递归设置所有子context） */
+void linx_rule_engine_match_set_base(linx_rule_match_t *match, void *base_addr);
+
 #endif /* __LINX_RULE_ENGINE_MATCH_H__ */
