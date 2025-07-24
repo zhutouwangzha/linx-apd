@@ -10,6 +10,8 @@
 #include <errno.h>
 #include <time.h>
 #include <signal.h>
+#include <sys/time.h>
+#include <stdatomic.h>
 
 #include "linx_process_cache.h"
 #include "linx_hash_map.h"
@@ -205,6 +207,48 @@ static int is_process_alive(pid_t pid)
     return (kill(pid, 0) == 0 || errno == EPERM);
 }
 
+/* 快速检查PID是否存在，避免系统调用开销 */
+static int quick_pid_check(pid_t pid)
+{
+    char path[64];
+    struct stat st;
+    
+    snprintf(path, sizeof(path), "/proc/%d", pid);
+    return (stat(path, &st) == 0);
+}
+
+/* 高效的PID范围扫描 */
+static int scan_pid_range(int start_pid, int end_pid, pid_t *found_pids, int max_pids)
+{
+    int count = 0;
+    char path[64];
+    struct stat st;
+    
+    for (int pid = start_pid; pid <= end_pid && count < max_pids; pid++) {
+        snprintf(path, sizeof(path), "/proc/%d", pid);
+        if (stat(path, &st) == 0) {
+            found_pids[count++] = pid;
+        }
+    }
+    
+    return count;
+}
+
+/* 获取系统中的最大PID值 */
+static int get_max_pid(void)
+{
+    FILE *fp;
+    int max_pid = 32768; /* 默认值 */
+    
+    fp = fopen("/proc/sys/kernel/pid_max", "r");
+    if (fp) {
+        fscanf(fp, "%d", &max_pid);
+        fclose(fp);
+    }
+    
+    return max_pid;
+}
+
 static linx_process_info_t *create_process_info(pid_t pid)
 {
     linx_process_info_t *info = calloc(1, sizeof(linx_process_info_t));
@@ -245,6 +289,59 @@ static void free_process_info(linx_process_info_t *info)
     }
 }
 
+/* 快速扫描任务 */
+static void *fast_scan_task(void *arg, int *should_stop)
+{
+    fast_scan_task_t *task = (fast_scan_task_t *)arg;
+    pid_t found_pids[LINX_PROCESS_CACHE_BATCH_SIZE];
+    int found_count;
+    pid_t *pid_arg;
+    time_t now;
+    
+    if (!task) {
+        return NULL;
+    }
+    
+    found_count = scan_pid_range(task->start_pid, task->end_pid, 
+                                found_pids, LINX_PROCESS_CACHE_BATCH_SIZE);
+    
+    atomic_fetch_add(&g_process_cache->total_scanned, found_count);
+    
+    now = time(NULL);
+    
+    for (int i = 0; i < found_count && !*should_stop; i++) {
+        pid_t pid = found_pids[i];
+        
+        /* 检查是否已经缓存 */
+        pthread_rwlock_rdlock(&g_process_cache->lock);
+        linx_process_info_t *existing;
+        HASH_FIND_INT(g_process_cache->hash_table, &pid, existing);
+        pthread_rwlock_unlock(&g_process_cache->lock);
+        
+        if (!existing) {
+            /* 新进程，异步更新 */
+            pid_arg = malloc(sizeof(pid_t));
+            if (pid_arg) {
+                *pid_arg = pid;
+                linx_thread_pool_add_task(g_process_cache->thread_pool, 
+                                        update_process_task, pid_arg);
+            }
+        } else if (existing->is_alive && 
+                  (now - existing->update_time) > LINX_PROCESS_CACHE_UPDATE_INTERVAL) {
+            /* 已存在但需要更新 */
+            pid_arg = malloc(sizeof(pid_t));
+            if (pid_arg) {
+                *pid_arg = pid;
+                linx_thread_pool_add_task(g_process_cache->thread_pool, 
+                                        update_process_task, pid_arg);
+            }
+        }
+    }
+    
+    free(task);
+    return NULL;
+}
+
 static void *update_process_task(void *arg, int *should_stop)
 {
     pid_t pid = *(pid_t *)arg;
@@ -283,6 +380,49 @@ static void *update_process_task(void *arg, int *should_stop)
     return NULL;
 }
 
+/* 高频扫描线程 */
+static void *high_freq_scan_thread(void *arg, int *should_stop)
+{
+    int thread_id = *(int *)arg;
+    int max_pid = get_max_pid();
+    int pid_range = max_pid / LINX_PROCESS_CACHE_FAST_SCAN_THREADS;
+    int start_pid = thread_id * pid_range + 1;
+    int end_pid = (thread_id + 1) * pid_range;
+    
+    if (thread_id == LINX_PROCESS_CACHE_FAST_SCAN_THREADS - 1) {
+        end_pid = max_pid; /* 最后一个线程处理剩余范围 */
+    }
+    
+    struct timespec sleep_time;
+    sleep_time.tv_sec = 0;
+    sleep_time.tv_nsec = LINX_PROCESS_CACHE_HIGH_FREQ_INTERVAL_MS * 1000000L;
+    
+    free(arg);
+    
+    while (atomic_load(&g_process_cache->running) && !*should_stop) {
+        /* 检查是否在高频模式 */
+        if (!atomic_load(&g_process_cache->high_freq_mode)) {
+            sleep(1);
+            continue;
+        }
+        
+        fast_scan_task_t *task = malloc(sizeof(fast_scan_task_t));
+        if (task) {
+            task->start_pid = start_pid;
+            task->end_pid = end_pid;
+            task->thread_id = thread_id;
+            
+            linx_thread_pool_add_task(g_process_cache->fast_scan_pool, 
+                                    fast_scan_task, task);
+        }
+        
+        atomic_fetch_add(&g_process_cache->scan_cycles, 1);
+        nanosleep(&sleep_time, NULL);
+    }
+    
+    return NULL;
+}
+
 static void *monitor_thread_func(void *arg, int *should_stop)
 {
     (void)arg;
@@ -290,65 +430,72 @@ static void *monitor_thread_func(void *arg, int *should_stop)
     struct dirent *entry;
     pid_t pid, *pid_arg;
     linx_process_info_t *info, *tmp;
-    int poll_interval;
+    time_t now, last_check = 0;
 
-#if LINX_PROCESS_CACHE_EVENT_DRIVEN_ENABLED
-    poll_interval = LINX_PROCESS_CACHE_EVENT_DRIVEN_POLL_INTERVAL;
-#else
-    poll_interval = LINX_PROCESS_CACHE_UPDATE_INTERVAL;
-#endif
-
-    while (g_process_cache->running && !*should_stop) {
-        proc_dir = opendir("/proc");
-        if (proc_dir == NULL) {
-            sleep(poll_interval);
-            continue;
-        }
-
-        while ((entry = readdir(proc_dir)) != NULL) {
-            if (!isdigit(entry->d_name[0])) {
-                continue;
-            }
-
-            pid = atoi(entry->d_name);
-            if (pid <= 0) {
-                continue;
-            }
-
-#if LINX_PROCESS_CACHE_EVENT_DRIVEN_ENABLED
-            /* 在事件驱动模式下，只处理还没有缓存的进程 */
-            pthread_rwlock_rdlock(&g_process_cache->lock);
-            HASH_FIND_INT(g_process_cache->hash_table, &pid, info);
-            pthread_rwlock_unlock(&g_process_cache->lock);
-            
-            if (info) {
-                continue; /* 已经缓存，跳过 */
-            }
-#endif
-
-            pid_arg = malloc(sizeof(pid_t));
-            if (pid_arg) {
-                *pid_arg = pid;
-                linx_thread_pool_add_task(g_process_cache->thread_pool, update_process_task, pid_arg);
+    while (atomic_load(&g_process_cache->running) && !*should_stop) {
+        now = time(NULL);
+        
+        /* 检查是否需要退出高频模式 */
+        if (atomic_load(&g_process_cache->high_freq_mode)) {
+            if (now - g_process_cache->high_freq_start_time > 
+                LINX_PROCESS_CACHE_HIGH_FREQ_DURATION) {
+                atomic_store(&g_process_cache->high_freq_mode, 0);
+                printf("退出高频扫描模式\n");
             }
         }
+        
+        /* 低频率的完整扫描作为备份 */
+        if (now - last_check >= LINX_PROCESS_CACHE_UPDATE_INTERVAL) {
+            proc_dir = opendir("/proc");
+            if (proc_dir != NULL) {
+                while ((entry = readdir(proc_dir)) != NULL) {
+                    if (!isdigit(entry->d_name[0])) {
+                        continue;
+                    }
 
-        closedir(proc_dir);
+                    pid = atoi(entry->d_name);
+                    if (pid <= 0) {
+                        continue;
+                    }
+
+                    /* 检查是否已缓存 */
+                    pthread_rwlock_rdlock(&g_process_cache->lock);
+                    HASH_FIND_INT(g_process_cache->hash_table, &pid, info);
+                    pthread_rwlock_unlock(&g_process_cache->lock);
+                    
+                    if (!info) {
+                        pid_arg = malloc(sizeof(pid_t));
+                        if (pid_arg) {
+                            *pid_arg = pid;
+                            linx_thread_pool_add_task(g_process_cache->thread_pool, 
+                                                    update_process_task, pid_arg);
+                        }
+                    }
+                }
+                closedir(proc_dir);
+            }
+            last_check = now;
+        }
 
         /* 检查已缓存进程的存活状态 */
         pthread_rwlock_wrlock(&g_process_cache->lock);
 
         HASH_ITER(hh, g_process_cache->hash_table, info, tmp) {
-            if (info->is_alive && !is_process_alive(info->pid)) {
+            if (info->is_alive && !quick_pid_check(info->pid)) {
                 info->is_alive = 0;
-                info->exit_time = time(NULL);
+                info->exit_time = now;
                 info->state = LINX_PROCESS_STATE_EXITED;
+                
+                /* 统计短暂进程 */
+                if (info->exit_time - info->create_time < LINX_PROCESS_CACHE_SHORT_LIVED_RETAIN_TIME) {
+                    atomic_fetch_add(&g_process_cache->short_lived_cached, 1);
+                }
             }
         }
 
         pthread_rwlock_unlock(&g_process_cache->lock);
 
-        sleep(poll_interval);
+        usleep(100000); /* 100ms */
     }
 
     return NULL;
@@ -413,6 +560,13 @@ int linx_process_cache_init(void)
         return -1;
     }
 
+    /* 初始化原子变量 */
+    atomic_init(&g_process_cache->running, 1);
+    atomic_init(&g_process_cache->total_scanned, 0);
+    atomic_init(&g_process_cache->short_lived_cached, 0);
+    atomic_init(&g_process_cache->scan_cycles, 0);
+
+    /* 创建线程池 */
     g_process_cache->thread_pool = linx_thread_pool_create(LINX_PROCESS_CACHE_THREAD_NUM);
     if (!g_process_cache->thread_pool) {
         pthread_rwlock_destroy(&g_process_cache->lock);
@@ -421,9 +575,18 @@ int linx_process_cache_init(void)
         return -1;
     }
 
-    g_process_cache->running = 1;
+    g_process_cache->fast_scan_pool = linx_thread_pool_create(LINX_PROCESS_CACHE_FAST_SCAN_THREADS * 2);
+    if (!g_process_cache->fast_scan_pool) {
+        linx_thread_pool_destroy(g_process_cache->thread_pool, 0);
+        pthread_rwlock_destroy(&g_process_cache->lock);
+        free(g_process_cache);
+        g_process_cache = NULL;
+        return -1;
+    }
 
+    /* 启动监控线程 */
     if (linx_thread_pool_add_task(g_process_cache->thread_pool, monitor_thread_func, NULL) < 0) {
+        linx_thread_pool_destroy(g_process_cache->fast_scan_pool, 0);
         linx_thread_pool_destroy(g_process_cache->thread_pool, 0);
         pthread_rwlock_destroy(&g_process_cache->lock);
         free(g_process_cache);
@@ -431,14 +594,51 @@ int linx_process_cache_init(void)
         return -1;
     }
 
+    /* 启动清理线程 */
     if (linx_thread_pool_add_task(g_process_cache->thread_pool, cleaner_thread_func, NULL) < 0) {
-        g_process_cache->running = 0;
+        atomic_store(&g_process_cache->running, 0);
+        linx_thread_pool_destroy(g_process_cache->fast_scan_pool, 0);
         linx_thread_pool_destroy(g_process_cache->thread_pool, 0);
         pthread_rwlock_destroy(&g_process_cache->lock);
         free(g_process_cache);
         g_process_cache = NULL;
         return -1;
     }
+
+#if LINX_PROCESS_CACHE_HIGH_FREQ_ENABLED
+    /* 启用高频扫描模式 */
+    atomic_init(&g_process_cache->high_freq_mode, 1);
+    g_process_cache->high_freq_start_time = time(NULL);
+    
+    /* 创建高频扫描线程 */
+    g_process_cache->fast_scan_threads = malloc(sizeof(pthread_t) * LINX_PROCESS_CACHE_FAST_SCAN_THREADS);
+    if (!g_process_cache->fast_scan_threads) {
+        atomic_store(&g_process_cache->running, 0);
+        linx_thread_pool_destroy(g_process_cache->fast_scan_pool, 0);
+        linx_thread_pool_destroy(g_process_cache->thread_pool, 0);
+        pthread_rwlock_destroy(&g_process_cache->lock);
+        free(g_process_cache);
+        g_process_cache = NULL;
+        return -1;
+    }
+    
+    for (int i = 0; i < LINX_PROCESS_CACHE_FAST_SCAN_THREADS; i++) {
+        int *thread_id = malloc(sizeof(int));
+        if (thread_id) {
+            *thread_id = i;
+            if (linx_thread_pool_add_task(g_process_cache->thread_pool, 
+                                        high_freq_scan_thread, thread_id) < 0) {
+                free(thread_id);
+            }
+        }
+    }
+    
+    printf("启用高频扫描模式，持续 %d 秒，扫描间隔 %d ms\n", 
+           LINX_PROCESS_CACHE_HIGH_FREQ_DURATION, 
+           LINX_PROCESS_CACHE_HIGH_FREQ_INTERVAL_MS);
+#else
+    atomic_init(&g_process_cache->high_freq_mode, 0);
+#endif
 
     return 0;
 }
@@ -450,9 +650,11 @@ void linx_process_cache_deinit(void)
         return;
     }
 
-    g_process_cache->running = 0;
+    atomic_store(&g_process_cache->running, 0);
+    atomic_store(&g_process_cache->high_freq_mode, 0);
 
     linx_thread_pool_destroy(g_process_cache->thread_pool, 1);
+    linx_thread_pool_destroy(g_process_cache->fast_scan_pool, 1);
 
     pthread_rwlock_wrlock(&g_process_cache->lock);
 
@@ -464,6 +666,10 @@ void linx_process_cache_deinit(void)
     pthread_rwlock_unlock(&g_process_cache->lock);
 
     pthread_rwlock_destroy(&g_process_cache->lock);
+
+    if (g_process_cache->fast_scan_threads) {
+        free(g_process_cache->fast_scan_threads);
+    }
 
     free(g_process_cache);
     g_process_cache = NULL;
@@ -636,29 +842,27 @@ void linx_process_cache_stats(int *total, int *alive, int *expired)
     }
 }
 
-/* 事件驱动接口实现 */
-int linx_process_cache_on_fork(pid_t new_pid, pid_t parent_pid)
+/* 新增高性能接口实现 */
+int linx_process_cache_force_update(pid_t pid)
 {
-    if (!g_process_cache || new_pid <= 0) {
+    linx_process_info_t *info, *old_info;
+
+    if (!g_process_cache || pid <= 0) {
         return -1;
     }
 
-    /* 立即为新进程创建缓存条目 */
-    linx_process_info_t *info = create_process_info(new_pid);
+    info = create_process_info(pid);
     if (!info) {
-        /* 如果立即创建失败，延迟创建 */
-        return linx_process_cache_update(new_pid);
+        return -1;
     }
 
     pthread_rwlock_wrlock(&g_process_cache->lock);
 
-    /* 检查是否已存在 */
-    linx_process_info_t *existing;
-    HASH_FIND_INT(g_process_cache->hash_table, &new_pid, existing);
-    if (existing) {
-        pthread_rwlock_unlock(&g_process_cache->lock);
-        free_process_info(info);
-        return 0;
+    HASH_FIND_INT(g_process_cache->hash_table, &pid, old_info);
+    if (old_info) {
+        info->create_time = old_info->create_time;
+        HASH_DEL(g_process_cache->hash_table, old_info);
+        free_process_info(old_info);
     }
 
     HASH_ADD_INT(g_process_cache->hash_table, pid, info);
@@ -668,57 +872,75 @@ int linx_process_cache_on_fork(pid_t new_pid, pid_t parent_pid)
     return 0;
 }
 
-int linx_process_cache_on_exec(pid_t pid, const char *filename, const char *argv, const char *envp)
+int linx_process_cache_batch_update(pid_t *pids, int count)
 {
-    if (!g_process_cache || pid <= 0) {
+    if (!g_process_cache || !pids || count <= 0) {
         return -1;
     }
 
-    /* exec事件表示进程已经变更，需要更新缓存 */
-    return linx_process_cache_update(pid);
-}
-
-int linx_process_cache_on_exit(pid_t pid, int exit_code)
-{
-    linx_process_info_t *info;
-
-    if (!g_process_cache || pid <= 0) {
-        return -1;
+    for (int i = 0; i < count; i++) {
+        pid_t *pid_arg = malloc(sizeof(pid_t));
+        if (pid_arg) {
+            *pid_arg = pids[i];
+            linx_thread_pool_add_task(g_process_cache->thread_pool, 
+                                    update_process_task, pid_arg);
+        }
     }
-
-    pthread_rwlock_wrlock(&g_process_cache->lock);
-
-    HASH_FIND_INT(g_process_cache->hash_table, &pid, info);
-    if (info) {
-        info->is_alive = 0;
-        info->exit_time = time(NULL);
-        info->state = LINX_PROCESS_STATE_EXITED;
-        /* 可以保存退出码到info结构中，如果需要的话 */
-    }
-
-    pthread_rwlock_unlock(&g_process_cache->lock);
 
     return 0;
 }
 
-int linx_process_cache_preload(pid_t pid)
+void linx_process_cache_get_detailed_stats(int *total, int *alive, int *expired, 
+                                         long *scanned, long *short_lived, long *cycles)
 {
-    if (!g_process_cache || pid <= 0) {
+    int t = 0, a = 0, e = 0;
+    linx_process_info_t *info;
+
+    if (!g_process_cache) {
+        if (total) *total = 0;
+        if (alive) *alive = 0;
+        if (expired) *expired = 0;
+        if (scanned) *scanned = 0;
+        if (short_lived) *short_lived = 0;
+        if (cycles) *cycles = 0;
+        return;
+    }
+
+    pthread_rwlock_rdlock(&g_process_cache->lock);
+
+    for (info = g_process_cache->hash_table; info != NULL; info = info->hh.next) {
+        t++;
+        if (info->is_alive) {
+            a++;
+        } else {
+            e++;
+        }
+    }
+
+    pthread_rwlock_unlock(&g_process_cache->lock);
+
+    if (total) *total = t;
+    if (alive) *alive = a;
+    if (expired) *expired = e;
+    if (scanned) *scanned = atomic_load(&g_process_cache->total_scanned);
+    if (short_lived) *short_lived = atomic_load(&g_process_cache->short_lived_cached);
+    if (cycles) *cycles = atomic_load(&g_process_cache->scan_cycles);
+}
+
+int linx_process_cache_set_high_freq_mode(int enabled)
+{
+    if (!g_process_cache) {
         return -1;
     }
 
-    /* 检查是否已经缓存 */
-    pthread_rwlock_rdlock(&g_process_cache->lock);
-    
-    linx_process_info_t *info;
-    HASH_FIND_INT(g_process_cache->hash_table, &pid, info);
-    
-    pthread_rwlock_unlock(&g_process_cache->lock);
-
-    if (info) {
-        return 0; /* 已经存在 */
+    if (enabled) {
+        atomic_store(&g_process_cache->high_freq_mode, 1);
+        g_process_cache->high_freq_start_time = time(NULL);
+        printf("启用高频扫描模式\n");
+    } else {
+        atomic_store(&g_process_cache->high_freq_mode, 0);
+        printf("禁用高频扫描模式\n");
     }
 
-    /* 异步创建缓存条目 */
-    return linx_process_cache_update(pid);
+    return 0;
 }

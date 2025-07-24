@@ -2,9 +2,26 @@
 #define __LINX_PROCESS_CACHE_DEFINE_H__ 
 
 /**
- * 缓存更新间隔秒数
+ * 缓存更新间隔秒数（常规模式）
 */
 #define LINX_PROCESS_CACHE_UPDATE_INTERVAL 1
+
+/**
+ * 高频扫描间隔（毫秒）
+ * 用于捕获短暂进程
+*/
+#define LINX_PROCESS_CACHE_HIGH_FREQ_INTERVAL_MS 10
+
+/**
+ * 是否启用高频扫描模式
+*/
+#define LINX_PROCESS_CACHE_HIGH_FREQ_ENABLED 1
+
+/**
+ * 高频扫描持续时间（秒）
+ * 启动后持续高频扫描一段时间，然后降低频率
+*/
+#define LINX_PROCESS_CACHE_HIGH_FREQ_DURATION 60
 
 /**
  * 缓存过期时间秒数
@@ -12,9 +29,20 @@
 #define LINX_PROCESS_CACHE_EXPIRE_TIME 20
 
 /**
+ * 短暂进程保留时间（秒）
+ * 对于生命周期很短的进程，保留更长时间
+*/
+#define LINX_PROCESS_CACHE_SHORT_LIVED_RETAIN_TIME 30
+
+/**
  * 缓存线程数
 */
-#define LINX_PROCESS_CACHE_THREAD_NUM 4
+#define LINX_PROCESS_CACHE_THREAD_NUM 8
+
+/**
+ * 快速扫描线程数
+*/
+#define LINX_PROCESS_CACHE_FAST_SCAN_THREADS 2
 
 /**
  * proc 路径最大长度
@@ -32,22 +60,13 @@
 #define PROC_COMM_MAX_LEN 256
 
 /**
- * 启用事件驱动模式
- * 当启用时，缓存将主要依赖系统调用事件来更新进程信息
- * 当禁用时，缓存将主要依赖定期扫描/proc目录
+ * 进程信息缓存的初始哈希表大小
 */
-#define LINX_PROCESS_CACHE_EVENT_DRIVEN_ENABLED 1
+#define LINX_PROCESS_CACHE_INITIAL_SIZE 1024
 
 /**
- * 事件驱动模式下的轮询间隔（秒）
- * 即使在事件驱动模式下，仍然需要定期扫描以捕获遗漏的进程
+ * 批量处理大小
 */
-#define LINX_PROCESS_CACHE_EVENT_DRIVEN_POLL_INTERVAL 10
-
-/**
- * 短暂进程的缓存保留时间（秒）
- * 对于生命周期很短的进程，我们需要保留其信息一段时间
-*/
-#define LINX_PROCESS_CACHE_SHORT_LIVED_RETAIN_TIME 5
+#define LINX_PROCESS_CACHE_BATCH_SIZE 100
 
 #endif /* __LINX_PROCESS_CACHE_DEFINE_H__ */
