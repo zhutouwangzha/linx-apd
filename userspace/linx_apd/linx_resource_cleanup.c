@@ -13,6 +13,7 @@
 #include "linx_rule_engine_match.h"
 #include "linx_rule_engine_set.h"
 #include "linx_resource_cleanup.h"
+#include "linx_process_cache.h"
 
 static linx_resource_cleanup_type_t linx_resource_cleanup_type = LINX_RESOURCE_CLEANUP_ERROR;
 
@@ -24,7 +25,6 @@ linx_resource_cleanup_type_t *linx_resource_cleanup_get(void)
 void linx_resource_cleanup(void)
 {
     switch (linx_resource_cleanup_type) {
-    case LINX_RESOURCE_CLEANUP_EVENT_RICH:
     case LINX_RESOURCE_CLEANUP_ENGINE:
     case LINX_RESOURCE_CLEANUP_RULE_ENGINE:
         linx_rule_set_deinit();
@@ -32,7 +32,14 @@ void linx_resource_cleanup(void)
     case LINX_RESOURCE_CLEANUP_ALERT:
         linx_alert_deinit();
         /* fall through */
+    case LINX_RESOURCE_CLEANUP_EVENT_RICH:
     case LINX_RESOURCE_CLEANUP_EVENT_QUEUE:
+        linx_event_queue_free();
+        /* fall through */
+    case LINX_RESOURCE_CLEANUP_PROCESS_CACHE:
+        linx_process_cache_deinit();
+        /* fall through */
+    case LINX_RESOURCE_CLEANUP_HASH_MAP:
         linx_hash_map_deinit();
         /* fall through */
     case LINX_RESOURCE_CLEANUP_LOG:

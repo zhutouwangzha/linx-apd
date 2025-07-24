@@ -6,66 +6,47 @@
 #include "event.h"
 
 #include "linx_syscall_table.h"
+#include "linx_process_cache.h"
 
 static event_t evt = {0};
 
+static int update_field_base(pid_t pid)
+{
+    field_update_table_t tables[] = {
+        {"evt", &evt},
+        {"proc", (void *)linx_process_cache_get(pid)}
+    };
+
+    return linx_hash_map_update_tables_base(tables, sizeof(tables) / sizeof(tables[0]));
+}
+
+static int linx_event_rich_bind_field(void)
+{
+    int ret;
+
+    BEGIN_FIELD_MAPPINGS(evt)
+        FIELD_MAP(event_t, num, FIELD_TYPE_UINT64)
+        FIELD_MAP(event_t, time, FIELD_TYPE_CHARBUF)
+        FIELD_MAP(event_t, type, FILED_TYPE_CHARBUF_ARRAY)
+        FIELD_MAP(event_t, args, FIELD_TYPE_CHARBUF)
+        FIELD_MAP(event_t, res, FIELD_TYPE_CHARBUF)
+        FIELD_MAP(event_t, rawres, FIELD_TYPE_CHARBUF)
+        FIELD_MAP(event_t, failed, FIELD_TYPE_BOOL)
+        FIELD_MAP(event_t, dir, FIELD_TYPE_CHARBUF)
+    END_FIELD_MAPPINGS(evt)
+
+    ret = linx_hash_map_add_field_batch("evt", evt_mappings, evt_mappings_count);
+    if (ret) {
+        LINX_LOG_ERROR("linx_hash_map_add_field_batch failed");
+        return -1;
+    }
+}
+
 int linx_event_rich_init(void)
 {
-    /* 初始化 evt 结构体成员映射 */
-    int ret = linx_hash_map_init();
-    if (ret) {
-        LINX_LOG_ERROR("linx_hash_map_init failed");
-        return -1;
-    }
+    int ret = linx_event_rich_bind_field();
 
-    ret = linx_hash_map_create_table("evt", &evt);
-    if (ret) {
-        LINX_LOG_ERROR("linx_hash_map_create_table failed");
-        linx_hash_map_deinit();
-        return -1;
-    }
-
-    ret = linx_hash_map_add_field("evt", "num", offsetof(event_t, num), sizeof(evt.num), FIELD_TYPE_UINT64);
-    if (ret) {
-        LINX_LOG_WARNING("add field name offset failed");
-    }
-    
-    ret = linx_hash_map_add_field("evt", "time", offsetof(event_t, time), sizeof(evt.time), FIELD_TYPE_CHARBUF);
-    if (ret) {
-        LINX_LOG_WARNING("add field name offset failed");
-    }
-    
-    ret = linx_hash_map_add_field("evt", "type", offsetof(event_t, type), sizeof(evt.type), FILED_TYPE_CHARBUF_ARRAY);
-    if (ret) {
-        LINX_LOG_WARNING("add field name offset failed");
-    }
-    
-    ret = linx_hash_map_add_field("evt", "args", offsetof(event_t, args), sizeof(evt.args), FIELD_TYPE_CHARBUF);
-    if (ret) {
-        LINX_LOG_WARNING("add field name offset failed");
-    }
-    
-    ret = linx_hash_map_add_field("evt", "res", offsetof(event_t, res), sizeof(evt.res), FIELD_TYPE_CHARBUF);
-    if (ret) {
-        LINX_LOG_WARNING("add field name offset failed");
-    }
-
-    ret = linx_hash_map_add_field("evt", "rawres", offsetof(event_t, rawres), sizeof(evt.rawres), FIELD_TYPE_CHARBUF);
-    if (ret) {
-        LINX_LOG_WARNING("add field name offset failed");
-    }    
-
-    ret = linx_hash_map_add_field("evt", "failed", offsetof(event_t, failed), sizeof(evt.failed), FIELD_TYPE_BOOL);
-    if (ret) {
-        LINX_LOG_WARNING("add field name offset failed");
-    }
-
-    ret = linx_hash_map_add_field("evt", "dir", offsetof(event_t, dir), sizeof(evt.dir), FIELD_TYPE_CHARBUF);
-    if (ret) {
-        LINX_LOG_WARNING("add field name offset failed");
-    }
-
-    return 0;
+    return ret;
 }
 
 int linx_event_rich(linx_event_t *event)
@@ -82,6 +63,7 @@ int linx_event_rich(linx_event_t *event)
     time_t seconds = ns / 1000000000;
     struct tm *timeinfo = localtime(&seconds);
     size_t len = strftime(evt.time, sizeof(evt.time), "%Y-%m-%d %H:%M:%S", timeinfo);
+    int ret;
 
     snprintf(evt.time + len, sizeof(evt.time) - len, ".%09lu", remaining_ns);
 
@@ -99,7 +81,9 @@ int linx_event_rich(linx_event_t *event)
         strcpy(evt.res, "ERRNO");
     }
 
-    return 0;
+    ret = update_field_base(event->pid);
+
+    return ret;
 }
 
 int linx_event_rich_deinit(void)

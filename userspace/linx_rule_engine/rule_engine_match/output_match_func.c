@@ -159,50 +159,51 @@ static size_t format_field_value(segment_t *segment, char *buffer, size_t buffer
     size_t field_str_len = 0;
     char field_str[256] = {0};
     field_result_t *field = &segment->data.variable;
+    void *value_ptr = linx_hash_map_get_value_ptr(field);
 
-    if (!field->found || field->value_ptr == NULL) {
+    if (!field->found || value_ptr == NULL) {
         return field_str_len;
     }
 
     switch (field->type) {
     case FIELD_TYPE_INT8:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%hhd", *(int8_t *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%hhd", *(int8_t *)value_ptr);
         break;
     case FIELD_TYPE_UINT8:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%hhu", *(uint8_t *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%hhu", *(uint8_t *)value_ptr);
         break;
     case FIELD_TYPE_INT16:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%hd", *(int16_t *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%hd", *(int16_t *)value_ptr);
         break;
     case FIELD_TYPE_UINT16:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%hu", *(uint16_t *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%hu", *(uint16_t *)value_ptr);
         break;
     case FIELD_TYPE_INT32:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%d", *(int32_t *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%d", *(int32_t *)value_ptr);
         break;
     case FIELD_TYPE_UINT32:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%u", *(uint32_t *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%u", *(uint32_t *)value_ptr);
         break;
     case FIELD_TYPE_INT64:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%ld", *(int64_t *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%ld", *(int64_t *)value_ptr);
         break;
     case FIELD_TYPE_UINT64:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%lu", *(uint64_t *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%lu", *(uint64_t *)value_ptr);
         break;
     case FIELD_TYPE_CHARBUF:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%s", (char *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%s", (char *)value_ptr);
         break;
     case FILED_TYPE_CHARBUF_ARRAY:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%s", (char *)(*(uint64_t *)field->value_ptr));
+        field_str_len = snprintf(field_str, sizeof(field_str), "%s", (char *)(*(uint64_t *)value_ptr));
         break;
     case FIELD_TYPE_BOOL:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%s", *(bool *)field->value_ptr ? "true" : "false");
+        field_str_len = snprintf(field_str, sizeof(field_str), "%s", *(bool *)value_ptr ? "true" : "false");
         break;
     case FIELD_TYPE_FLOAT:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%f", *(float *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%f", *(float *)value_ptr);
         break;
     case FIELD_TYPE_DOUBLE:
-        field_str_len = snprintf(field_str, sizeof(field_str), "%lf", *(double *)field->value_ptr);
+        field_str_len = snprintf(field_str, sizeof(field_str), "%lf", *(double *)value_ptr);
         break;
     default:
         break;

@@ -11,7 +11,7 @@ linx_global_config_t *linx_global_config = NULL;
 int linx_config_init(void)
 {
     if (linx_global_config) {
-        return -1;
+        return 0;
     }
 
     linx_global_config = (linx_global_config_t *)malloc(sizeof(linx_global_config_t));
@@ -28,6 +28,21 @@ void linx_config_deinit(void)
 {
     if (!linx_global_config) {
         return;
+    }
+
+    if (linx_global_config->engine) {
+        free(linx_global_config->engine);
+        linx_global_config->engine = NULL;
+    }
+
+    if (linx_global_config->log_config.log_level) {
+        free(linx_global_config->log_config.log_level);
+        linx_global_config->log_config.log_level = NULL;
+    }
+
+    if (linx_global_config->log_config.output) {
+        free(linx_global_config->log_config.output);
+        linx_global_config->log_config.output = NULL;
     }
 
     free(linx_global_config);

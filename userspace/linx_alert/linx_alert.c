@@ -181,7 +181,13 @@ int linx_alert_update_config(linx_alert_config_t config)
 }
 
 
-/* 核心输出函数 */
+/**
+ * 异步发送告警信息
+ * @param output 告警输出匹配信息
+ * @param rule_name 触发告警的规则名称
+ * @param priority 告警优先级
+ * @return 成功返回0，失败返回-1
+ */
 int linx_alert_send_async(linx_output_match_t *output, const char *rule_name, int priority)
 {
     char buffer[4096];
@@ -189,24 +195,29 @@ int linx_alert_send_async(linx_output_match_t *output, const char *rule_name, in
     linx_alert_message_t *message;
     linx_alert_task_arg_t *task_arg;
 
+    // 检查告警模块是否已初始化以及参数是否有效
     if (s_alert == NULL || !s_alert->initialized || output == NULL) {
         return -1;
     }
 
+    // 格式化输出匹配信息到缓冲区
     ret = linx_output_match_format(output, buffer, sizeof(buffer));
     if (ret < 0) {
         return -1;
     }
 
+    // 创建告警消息对象
     message = linx_alert_message_create(buffer, rule_name, priority);
     if (!message) {
         return -1;
     }
 
+    // 复制当前告警配置到消息对象中
     pthread_mutex_lock(&s_alert->config_mutex);
     memcpy(message->config, s_alert->config, sizeof(s_alert->config));
     pthread_mutex_unlock(&s_alert->config_mutex);
 
+    // 分配任务参数结构体内存
     task_arg = malloc(sizeof(linx_alert_task_arg_t));
     if (!task_arg) {
         linx_alert_message_destroy(message);
@@ -215,6 +226,7 @@ int linx_alert_send_async(linx_output_match_t *output, const char *rule_name, in
 
     task_arg->message = message;
 
+    // 将告警任务添加到线程池中执行
     ret = linx_thread_pool_add_task(s_alert->thread_pool, linx_alert_worker_task, task_arg);
     if (ret) {
         free(task_arg);

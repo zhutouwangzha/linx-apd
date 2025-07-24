@@ -14,4 +14,8 @@ void linx_rule_engine_match_destroy(linx_rule_match_t *match);
 
 bool linx_rule_engine_match(linx_rule_match_t *match);
 
+bool linx_rule_engine_match_with_base(linx_rule_match_t *match, void *base);
+
+void linx_rule_engine_match_set_base(linx_rule_match_t *match, void *base);
+
 #endif /* __LINX_RULE_ENGINE_MATCH_H__ */

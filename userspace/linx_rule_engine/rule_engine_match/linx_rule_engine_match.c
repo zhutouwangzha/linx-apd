@@ -113,7 +113,7 @@ static linx_rule_match_t *compile_binary_num_node(ast_node_t *node)
         return NULL;
     }
 
-    ret = find_field_name_and_value(node, &field_name, &context);
+    ret = find_field_name_and_value(node, &field_name, (void *)&context);
     if (ret) {
         LINX_LOG_ERROR("Failed to find field name");
     }
@@ -160,7 +160,7 @@ static linx_rule_match_t *compile_binary_str_node(ast_node_t *node)
         return NULL;
     }
 
-    ret = find_field_name_and_value(node, &field_name, &context);
+    ret = find_field_name_and_value(node, &field_name, (void *)&context);
     if (ret) {
         LINX_LOG_ERROR("Failed to find field name");
     }
@@ -354,12 +354,10 @@ void linx_rule_engine_match_destroy(linx_rule_match_t *match)
         if (l_context) {
             if (l_context->left) {
                 linx_rule_engine_match_destroy(l_context->left);
-                l_context->left = NULL;
             }
 
             if (l_context->right) {
                 linx_rule_engine_match_destroy(l_context->left);
-                l_context->right = NULL;
             }
 
             free(l_context);

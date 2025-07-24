@@ -17,10 +17,10 @@
 #include "linx_resource_cleanup.h"
 #include "linx_event_queue.h"
 #include "linx_event.h"
+#include "linx_process_cache.h"
 static int linx_event_loop(void)
 {
     int ret = 0;
-    linx_resource_cleanup_type_t *type = linx_resource_cleanup_get();
     linx_event_t *event = NULL;
 
     ret = linx_engine_start();
@@ -61,7 +61,9 @@ int main(int argc, char *argv[])
     const struct argp *linx_argp = linx_argp_get_argp();
     linx_resource_cleanup_type_t *type = linx_resource_cleanup_get();
 
-    /* 注册信号 */
+    /**
+     * 注册信号，收到信号进行资源回收操作
+    */
     linx_setup_signal(SIGINT);
     linx_setup_signal(SIGUSR1);
 
@@ -112,6 +114,26 @@ int main(int argc, char *argv[])
     } else {
         *type = LINX_RESOURCE_CLEANUP_LOG;
     }
+
+    /**
+     * hash表初始化
+    */
+   ret = linx_hash_map_init();
+   if (ret) {
+        LINX_LOG_ERROR("linx_hash_map_init failed\n");
+    } else {
+        *type = LINX_RESOURCE_CLEANUP_HASH_MAP;
+   }
+
+    /**
+     * 进程缓存初始化
+    */
+   ret = linx_process_cache_init();
+   if (ret) {
+        LINX_LOG_ERROR("linx_process_cache_init failed\n");
+    } else {
+        *type = LINX_RESOURCE_CLEANUP_PROCESS_CACHE;
+   }
 
     ret = linx_event_queue_init(2);
     if (ret) {

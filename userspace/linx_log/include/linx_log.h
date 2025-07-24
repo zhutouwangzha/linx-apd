@@ -7,6 +7,7 @@
 
 #include "linx_log_level.h"
 #include "linx_log_message.h"
+#include "linx_thread_pool.h"
 
 #define LINX_LOG_DEBUG(...)     linx_log(LINX_LOG_DEBUG,   __FILE__, __LINE__, ##__VA_ARGS__)
 #define LINX_LOG_INFO(...)      linx_log(LINX_LOG_INFO,    __FILE__, __LINE__, ##__VA_ARGS__)
@@ -23,8 +24,11 @@
 typedef struct {
     linx_log_level_t level;
     FILE *log_file;
+
+    linx_thread_pool_t *thread_pool;
     linx_log_message_t **queue;
     pthread_mutex_t lock;
+
     int queue_size;
     int queue_capacity;
 } linx_log_t;

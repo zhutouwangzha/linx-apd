@@ -1,22 +1,35 @@
 #ifndef __LINX_PROCESS_CACHE_H__
 #define __LINX_PROCESS_CACHE_H__ 
 
-#include "linx_process_cache_node.h"
+#include <pthread.h>
+
+#include "linx_process_cache_info.h"
+#include "linx_thread_pool.h"
 
 typedef struct {
-    size_t capacity;
-    size_t size;
-    linx_process_node_t *head;
-    linx_process_node_t *tail;
-    time_t max_age;             /* 最大缓存时间 */
+    linx_process_info_t *hash_table;
+    pthread_rwlock_t lock;
+
+    linx_thread_pool_t *thread_pool;
+    int running;
+    pthread_t monitor_thread;
+    pthread_t cleaner_thread;
 } linx_process_cache_t;
 
-linx_process_cache_t *linx_process_cache_init(size_t capacity, time_t max_age);
+int linx_process_cache_init(void);
 
-void linx_process_cache_free(linx_process_cache_t *cache);
+void linx_process_cache_deinit(void);
 
-linx_process_info_t *linx_process_cache_get(linx_process_cache_t *cache, pid_t pid);
+linx_process_info_t *linx_process_cache_get(pid_t pid);
 
-int linx_process_cache_update(linx_process_cache_t *cache,  pid_t pid);
+int linx_process_cache_get_all(linx_process_info_t **list, int *count);
+
+int linx_process_cache_update(pid_t pid);
+
+int linx_process_cache_delete(pid_t pid);
+
+int linx_process_cache_cleanup(void);
+
+void linx_process_cache_stats(int *total, int *alive, int *expired);
 
 #endif /* __LINX_PROCESS_CACHE_H__ */

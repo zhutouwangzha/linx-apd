@@ -100,7 +100,6 @@ linx_yaml_node_t *linx_yaml_load(const char *config_file)
             /* 处理映射类型节点创建 */
             linx_yaml_node_t *node = linx_yaml_node_create(LINX_YAML_NODE_TYPE_MAPPING, stack->current_key);
             if (!node) {
-                printf("1");
                 error = 1;
                 break;
             }
@@ -114,7 +113,6 @@ linx_yaml_node_t *linx_yaml_load(const char *config_file)
             if (stack->size > 0) {
                 linx_yaml_node_t *parent = linx_yaml_stack_top(stack);
                 if (!parent) {
-                    printf("2");
                     error = 1;
                     break;
                 }
@@ -133,7 +131,6 @@ linx_yaml_node_t *linx_yaml_load(const char *config_file)
             /* 处理序列类型节点创建 */
             linx_yaml_node_t *node = linx_yaml_node_create(LINX_YAML_NODE_TYPE_SEQUENCE, stack->current_key);
             if (!node) {
-                printf("3");
                 error = 1;
                 break;
             }
@@ -147,7 +144,6 @@ linx_yaml_node_t *linx_yaml_load(const char *config_file)
             if (stack->size > 0) {
                 linx_yaml_node_t *parent = linx_yaml_stack_top(stack);
                 if (!parent) {
-                    printf("4");
                     error = 1;
                     break;
                 }
@@ -170,7 +166,6 @@ linx_yaml_node_t *linx_yaml_load(const char *config_file)
                 /* 序列中的标量值处理 */
                 linx_yaml_node_t *node = linx_yaml_node_create(LINX_YAML_NODE_TYPE_SCALAR, NULL);
                 if (!node) {
-                    printf("5");
                     error = 1;
                     break;
                 }
@@ -181,7 +176,6 @@ linx_yaml_node_t *linx_yaml_load(const char *config_file)
                 if (stack->size > 0) {
                     linx_yaml_node_t *parent = linx_yaml_stack_top(stack);
                     if (!parent) {
-                        printf("6");
                         error = 1;
                         break;
                     }
@@ -191,7 +185,6 @@ linx_yaml_node_t *linx_yaml_load(const char *config_file)
                 /* 映射中的值处理 */
                 linx_yaml_node_t *node = linx_yaml_node_create(LINX_YAML_NODE_TYPE_SCALAR, stack->current_key);
                 if (!node) {
-                    printf("7");
                     error = 1;
                     break;
                 }
@@ -201,7 +194,6 @@ linx_yaml_node_t *linx_yaml_load(const char *config_file)
                 if (stack->size > 0) {
                     linx_yaml_node_t *parent = linx_yaml_stack_top(stack);
                     if (!parent) {
-                        printf("8");
                         error = 1;
                         break;
                     }

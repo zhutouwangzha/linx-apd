@@ -48,7 +48,7 @@ const struct argp linx_argp = {
 int linx_arg_init(void)
 {
     if (linx_arg_config) {
-        return -1;
+        return 0;
     }
 
     linx_arg_config = (linx_arg_config_t *)malloc(sizeof(linx_arg_config_t));
