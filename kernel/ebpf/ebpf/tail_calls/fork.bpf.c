@@ -26,7 +26,15 @@ int BPF_PROG(fork_x, struct pt_regs *regs, long ret)
 
     linx_ringbuf_load_event(ringbuf, get_syscall_id(regs), LINX_SYSCALL_TYPE_EXIT, ret);
 
-
+    /* 如果fork成功，ret是新进程的PID */
+    if (ret > 0) {
+        /* 存储新进程的PID */
+        linx_ringbuf_store_param_i32(ringbuf, (int32_t)ret);
+        
+        /* 存储父进程的PID */
+        pid_t ppid = bpf_get_current_pid_tgid() >> 32;
+        linx_ringbuf_store_param_i32(ringbuf, (int32_t)ppid);
+    }
 
     linx_ringbuf_submit_event(ringbuf);
 

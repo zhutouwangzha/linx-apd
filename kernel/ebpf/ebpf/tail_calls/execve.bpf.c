@@ -38,6 +38,11 @@ int BPF_PROG(execve_x, struct pt_regs *regs, long ret)
     uint64_t __envp = (uint64_t)get_pt_regs_argumnet(regs, 2);
     linx_ringbuf_store_charpointer(ringbuf, __envp, LINX_CHARBUF_MAX_SIZE, USER);
 
+    /* 如果execve成功(ret == 0)，存储当前进程PID */
+    if (ret == 0) {
+        pid_t pid = bpf_get_current_pid_tgid() >> 32;
+        linx_ringbuf_store_param_i32(ringbuf, (int32_t)pid);
+    }
 
     linx_ringbuf_submit_event(ringbuf);
 

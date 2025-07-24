@@ -217,14 +217,20 @@ static linx_process_info_t *create_process_info(pid_t pid)
     info->update_time = info->create_time;
     info->is_alive = 1;
     
-    /* 读取进程信息 */
-    if (read_proc_stat(pid, info) < 0 ||
-        read_proc_status(pid, info) < 0) {
+    /* 优先读取关键信息 */
+    if (read_proc_stat(pid, info) < 0) {
         free(info);
         return NULL;
     }
 
-    /* 尝试读取其他信息，失败不影响创建 */
+    /* 读取状态信息，失败时使用默认值 */
+    if (read_proc_status(pid, info) < 0) {
+        /* 使用默认值，不失败 */
+        info->uid = 0;
+        info->gid = 0;
+    }
+
+    /* 并行读取其他信息，失败不影响创建 */
     read_proc_cmdline(pid, info);
     read_proc_exe(pid, info);
     read_proc_cwd(pid, info);
@@ -284,11 +290,18 @@ static void *monitor_thread_func(void *arg, int *should_stop)
     struct dirent *entry;
     pid_t pid, *pid_arg;
     linx_process_info_t *info, *tmp;
+    int poll_interval;
+
+#if LINX_PROCESS_CACHE_EVENT_DRIVEN_ENABLED
+    poll_interval = LINX_PROCESS_CACHE_EVENT_DRIVEN_POLL_INTERVAL;
+#else
+    poll_interval = LINX_PROCESS_CACHE_UPDATE_INTERVAL;
+#endif
 
     while (g_process_cache->running && !*should_stop) {
         proc_dir = opendir("/proc");
         if (proc_dir == NULL) {
-            sleep(LINX_PROCESS_CACHE_UPDATE_INTERVAL);
+            sleep(poll_interval);
             continue;
         }
 
@@ -302,6 +315,17 @@ static void *monitor_thread_func(void *arg, int *should_stop)
                 continue;
             }
 
+#if LINX_PROCESS_CACHE_EVENT_DRIVEN_ENABLED
+            /* 在事件驱动模式下，只处理还没有缓存的进程 */
+            pthread_rwlock_rdlock(&g_process_cache->lock);
+            HASH_FIND_INT(g_process_cache->hash_table, &pid, info);
+            pthread_rwlock_unlock(&g_process_cache->lock);
+            
+            if (info) {
+                continue; /* 已经缓存，跳过 */
+            }
+#endif
+
             pid_arg = malloc(sizeof(pid_t));
             if (pid_arg) {
                 *pid_arg = pid;
@@ -311,6 +335,7 @@ static void *monitor_thread_func(void *arg, int *should_stop)
 
         closedir(proc_dir);
 
+        /* 检查已缓存进程的存活状态 */
         pthread_rwlock_wrlock(&g_process_cache->lock);
 
         HASH_ITER(hh, g_process_cache->hash_table, info, tmp) {
@@ -323,7 +348,7 @@ static void *monitor_thread_func(void *arg, int *should_stop)
 
         pthread_rwlock_unlock(&g_process_cache->lock);
 
-        sleep(LINX_PROCESS_CACHE_UPDATE_INTERVAL);
+        sleep(poll_interval);
     }
 
     return NULL;
@@ -344,10 +369,20 @@ static void *cleaner_thread_func(void *arg, int *should_stop)
 
         HASH_ITER(hh, g_process_cache->hash_table, info, tmp) {
             /* 清理已退出且超过保留时间的进程 */
-            if (!info->is_alive && info->exit_time > 0 &&
-                (now - info->exit_time) > LINX_PROCESS_CACHE_EXPIRE_TIME) {
-                HASH_DEL(g_process_cache->hash_table, info);
-                free_process_info(info);
+            if (!info->is_alive && info->exit_time > 0) {
+                time_t retention_time;
+                
+                /* 短暂进程（生命周期小于设定时间）使用较短的保留时间 */
+                if (info->exit_time - info->create_time < LINX_PROCESS_CACHE_SHORT_LIVED_RETAIN_TIME) {
+                    retention_time = LINX_PROCESS_CACHE_SHORT_LIVED_RETAIN_TIME;
+                } else {
+                    retention_time = LINX_PROCESS_CACHE_EXPIRE_TIME;
+                }
+                
+                if ((now - info->exit_time) > retention_time) {
+                    HASH_DEL(g_process_cache->hash_table, info);
+                    free_process_info(info);
+                }
             }
         }
 
@@ -599,4 +634,91 @@ void linx_process_cache_stats(int *total, int *alive, int *expired)
     if (expired) {
         *expired = e;
     }
+}
+
+/* 事件驱动接口实现 */
+int linx_process_cache_on_fork(pid_t new_pid, pid_t parent_pid)
+{
+    if (!g_process_cache || new_pid <= 0) {
+        return -1;
+    }
+
+    /* 立即为新进程创建缓存条目 */
+    linx_process_info_t *info = create_process_info(new_pid);
+    if (!info) {
+        /* 如果立即创建失败，延迟创建 */
+        return linx_process_cache_update(new_pid);
+    }
+
+    pthread_rwlock_wrlock(&g_process_cache->lock);
+
+    /* 检查是否已存在 */
+    linx_process_info_t *existing;
+    HASH_FIND_INT(g_process_cache->hash_table, &new_pid, existing);
+    if (existing) {
+        pthread_rwlock_unlock(&g_process_cache->lock);
+        free_process_info(info);
+        return 0;
+    }
+
+    HASH_ADD_INT(g_process_cache->hash_table, pid, info);
+
+    pthread_rwlock_unlock(&g_process_cache->lock);
+
+    return 0;
+}
+
+int linx_process_cache_on_exec(pid_t pid, const char *filename, const char *argv, const char *envp)
+{
+    if (!g_process_cache || pid <= 0) {
+        return -1;
+    }
+
+    /* exec事件表示进程已经变更，需要更新缓存 */
+    return linx_process_cache_update(pid);
+}
+
+int linx_process_cache_on_exit(pid_t pid, int exit_code)
+{
+    linx_process_info_t *info;
+
+    if (!g_process_cache || pid <= 0) {
+        return -1;
+    }
+
+    pthread_rwlock_wrlock(&g_process_cache->lock);
+
+    HASH_FIND_INT(g_process_cache->hash_table, &pid, info);
+    if (info) {
+        info->is_alive = 0;
+        info->exit_time = time(NULL);
+        info->state = LINX_PROCESS_STATE_EXITED;
+        /* 可以保存退出码到info结构中，如果需要的话 */
+    }
+
+    pthread_rwlock_unlock(&g_process_cache->lock);
+
+    return 0;
+}
+
+int linx_process_cache_preload(pid_t pid)
+{
+    if (!g_process_cache || pid <= 0) {
+        return -1;
+    }
+
+    /* 检查是否已经缓存 */
+    pthread_rwlock_rdlock(&g_process_cache->lock);
+    
+    linx_process_info_t *info;
+    HASH_FIND_INT(g_process_cache->hash_table, &pid, info);
+    
+    pthread_rwlock_unlock(&g_process_cache->lock);
+
+    if (info) {
+        return 0; /* 已经存在 */
+    }
+
+    /* 异步创建缓存条目 */
+    return linx_process_cache_update(pid);
 }

@@ -32,4 +32,13 @@ int linx_process_cache_cleanup(void);
 
 void linx_process_cache_stats(int *total, int *alive, int *expired);
 
+/* 新增事件驱动接口 */
+int linx_process_cache_on_fork(pid_t new_pid, pid_t parent_pid);
+
+int linx_process_cache_on_exec(pid_t pid, const char *filename, const char *argv, const char *envp);
+
+int linx_process_cache_on_exit(pid_t pid, int exit_code);
+
+int linx_process_cache_preload(pid_t pid);
+
 #endif /* __LINX_PROCESS_CACHE_H__ */

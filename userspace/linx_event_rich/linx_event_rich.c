@@ -57,6 +57,40 @@ int linx_event_rich(linx_event_t *event)
      * 同步更新到应用层保存的结构体中
     */
 
+    /* 处理进程相关的系统调用事件 */
+    switch (event->syscall_id) {
+        case 57:  /* __NR_fork */
+        case 58:  /* __NR_vfork */
+            if (event->type == LINX_SYSCALL_TYPE_EXIT && event->res > 0) {
+                /* fork成功，event->res是新进程的PID */
+                linx_process_cache_on_fork((pid_t)event->res, event->pid);
+            }
+            break;
+            
+        case 59:  /* __NR_execve */
+        case 322: /* __NR_execveat */
+            if (event->type == LINX_SYSCALL_TYPE_EXIT && event->res == 0) {
+                /* exec成功 */
+                linx_process_cache_on_exec(event->pid, NULL, NULL, NULL);
+            }
+            break;
+            
+        case 60:  /* __NR_exit */
+        case 231: /* __NR_exit_group */
+            if (event->type == LINX_SYSCALL_TYPE_ENTER) {
+                /* 进程即将退出 */
+                int exit_code = 0;
+                /* 这里可以从事件参数中获取退出码，如果eBPF提供了的话 */
+                linx_process_cache_on_exit(event->pid, exit_code);
+            }
+            break;
+            
+        default:
+            /* 对于其他系统调用，预加载进程信息以备后用 */
+            linx_process_cache_preload(event->pid);
+            break;
+    }
+
     /* 更新 evt 结构体相关内容 */
     uint64_t ns = event->time;
     uint64_t remaining_ns = ns % 1000000000;
