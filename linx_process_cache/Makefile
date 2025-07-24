@@ -1,61 +1,89 @@
 # Makefile for linx_process_cache module
 
 CC = gcc
-CFLAGS = -Wall -Wextra -g -O2 -D_GNU_SOURCE
+CLANG = clang
+CFLAGS = -Wall -Wextra -std=gnu99 -O2 -g
 LDFLAGS = -pthread
+BPF_CFLAGS = -O2 -g -target bpf -c
 
-# Include paths
-INCLUDES = -I./include \
-           -I../local_depends/uthash/include \
-           -I../userspace/linx_thread/include \
-           -I../include
+# 依赖库
+LIBS = -lbpf -lelf -lz
 
-# Source files
-SRCS = linx_process_cache.c
-TEST_SRCS = test_process_cache.c
+# 目标文件
+TARGETS = example_usage process_monitor.bpf.o
 
-# Object files
+# 头文件路径
+INCLUDES = -I./include -I../userspace/linx_thread/include
+
+# 源文件
+SRCS = linx_process_cache_enhanced.c linx_process_cache_ebpf.c example_usage.c
 OBJS = $(SRCS:.c=.o)
-TEST_OBJS = $(TEST_SRCS:.c=.o)
 
-# Thread pool dependency
-THREAD_POOL_OBJ = ../userspace/linx_thread/linx_thread_pool.o
+# BPF程序
+BPF_PROG = process_monitor.bpf.c
+BPF_OBJ = process_monitor.bpf.o
 
-# Target library
-LIB = liblinx_process_cache.a
+.PHONY: all clean install
 
-# Test executable
-TEST_BIN = test_process_cache
+all: $(TARGETS)
 
-# Default target
-all: $(LIB) $(TEST_BIN)
+# 编译eBPF程序
+$(BPF_OBJ): $(BPF_PROG)
+	$(CLANG) $(BPF_CFLAGS) $(INCLUDES) -o $@ $<
 
-# Build static library
-$(LIB): $(OBJS)
-	ar rcs $@ $^
+# 编译主程序
+example_usage: $(OBJS) $(BPF_OBJ)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(filter %.o,$^) $(LDFLAGS) $(LIBS)
 
-# Build test executable
-$(TEST_BIN): $(TEST_OBJS) $(LIB) $(THREAD_POOL_OBJ)
-	$(CC) $(LDFLAGS) -o $@ $^ 
-
-# Compile source files
+# 编译对象文件
 %.o: %.c
-	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
 
-# Build thread pool dependency
-$(THREAD_POOL_OBJ):
-	make -C ../userspace/linx_thread linx_thread_pool.o
+# 检查eBPF程序
+check-bpf: $(BPF_OBJ)
+	@echo "检查eBPF程序..."
+	@llvm-objdump -h $(BPF_OBJ) || echo "需要安装llvm工具"
 
-# Clean build artifacts
+# 安装依赖（Ubuntu/Debian）
+install-deps:
+	@echo "安装编译依赖..."
+	sudo apt-get update
+	sudo apt-get install -y \
+		build-essential \
+		clang \
+		llvm \
+		libbpf-dev \
+		libelf-dev \
+		zlib1g-dev \
+		linux-headers-$(shell uname -r)
+
+# 测试运行
+test: example_usage
+	@echo "运行测试（需要root权限用于eBPF）..."
+	sudo ./example_usage --help
+
+# 测试无eBPF模式
+test-no-ebpf: example_usage
+	@echo "运行无eBPF测试..."
+	./example_usage --no-ebpf --fast-scan
+
+# 清理
 clean:
-	rm -f $(OBJS) $(TEST_OBJS) $(LIB) $(TEST_BIN)
+	rm -f $(OBJS) $(TARGETS)
 
-# Run test
-test: $(TEST_BIN)
-	./$(TEST_BIN)
+# 显示帮助
+help:
+	@echo "可用目标:"
+	@echo "  all           - 编译所有目标"
+	@echo "  example_usage - 编译示例程序"
+	@echo "  check-bpf     - 检查eBPF程序"
+	@echo "  install-deps  - 安装编译依赖"
+	@echo "  test          - 运行测试（需要root权限）"
+	@echo "  test-no-ebpf  - 运行无eBPF测试"
+	@echo "  clean         - 清理编译文件"
+	@echo "  help          - 显示此帮助"
 
-# Run monitor mode
-monitor: $(TEST_BIN)
-	./$(TEST_BIN) monitor
-
-.PHONY: all clean test monitor
+# 依赖关系
+linx_process_cache_enhanced.o: linx_process_cache_enhanced.c include/linx_process_cache.h include/linx_process_cache_ebpf.h
+linx_process_cache_ebpf.o: linx_process_cache_ebpf.c include/linx_process_cache_ebpf.h include/linx_process_cache.h
+example_usage.o: example_usage.c include/linx_process_cache.h include/linx_process_cache_ebpf.h
