@@ -3,7 +3,7 @@
   condition: >
     proc.name = find
     and evt.type = execve
-    and evt.dir = <
+    and (evt.dir = < or evt.dir = >)
     and (
     proc.cmdline icontains "pass"
     or proc.cmdline icontains "-perm -4000"

@@ -255,6 +255,15 @@ static void *update_process_task(void *arg, int *should_stop)
 
     info = create_process_info(pid);
     if (!info) {
+        // 如果无法创建进程信息，可能是进程已退出
+        // 检查是否有已存在的缓存项，如果有则标记为已退出
+        pthread_rwlock_wrlock(&g_process_cache->lock);
+        HASH_FIND_INT(g_process_cache->hash_table, &pid, old_info);
+        if (old_info && old_info->is_alive) {
+            old_info->is_alive = 0;
+            old_info->exit_time = time(NULL);
+        }
+        pthread_rwlock_unlock(&g_process_cache->lock);
         return NULL;
     }
 
@@ -349,10 +358,20 @@ static void *cleaner_thread_func(void *arg, int *should_stop)
 
         HASH_ITER(hh, g_process_cache->hash_table, info, tmp) {
             /* 清理已退出且超过保留时间的进程 */
-            if (!info->is_alive && info->exit_time > 0 &&
-                (now - info->exit_time) > LINX_PROCESS_CACHE_EXPIRE_TIME) {
-                HASH_DEL(g_process_cache->hash_table, info);
-                free_process_info(info);
+            if (!info->is_alive && info->exit_time > 0) {
+                time_t retain_time;
+                // 对于短生命周期进程（存活时间很短），使用较短的保留时间
+                // 这样可以在保证规则匹配的同时，避免缓存占用过多内存
+                if ((info->exit_time - info->create_time) <= 5) {
+                    retain_time = LINX_PROCESS_CACHE_SHORT_LIVED_RETAIN_TIME;
+                } else {
+                    retain_time = LINX_PROCESS_CACHE_EXPIRE_TIME;
+                }
+                
+                if ((now - info->exit_time) > retain_time) {
+                    HASH_DEL(g_process_cache->hash_table, info);
+                    free_process_info(info);
+                }
             }
         }
 

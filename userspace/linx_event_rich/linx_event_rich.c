@@ -69,10 +69,10 @@ int linx_event_rich(linx_event_t *event)
 
     snprintf(evt.time + len, sizeof(evt.time) - len, ".%09lu", remaining_ns);
 
-    if (event->type == LINX_SYSCALL_TYPE_ENTER && 
-        event->syscall_id == LINX_SYSCALL_EXECVE)
+    if (event->syscall_id == LINX_SYSCALL_EXECVE)
     {
-        // printf("com: %s\n cmdline: %s\n", event->comm, event->cmdline);
+        // 对于execve系统调用，无论ENTER还是EXIT都同步更新进程缓存
+        // 这样可以确保短生命周期进程（如find命令）的信息能被正确获取
         ret = linx_process_cache_update_sync(event->pid);
     }
 
