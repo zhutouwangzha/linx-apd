@@ -10,7 +10,7 @@
     or proc.cmdline icontains "-perm -u=s"
     or proc.cmdline icontains "-user root")
   output: >
-    Suspicious library read by find (pid=%proc.pid ppid=%proc.ppid user=%user.name command=%proc.cmdline)
+    Suspicious library read by find (pid=%proc.pid ppid=%proc.ppid command=%proc.cmdline)
   priority: INFORMATIONAL
   tags:
     - system

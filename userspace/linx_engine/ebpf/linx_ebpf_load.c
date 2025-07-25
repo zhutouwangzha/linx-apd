@@ -2,9 +2,11 @@
 #include "linx_ebpf_api.h"
 #include "linx_ebpf_common.h"
 #include "linx_syscall_table.h"
-
+#include "linx_config.h"
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
+    (void)level;
+
     LINX_LOG_DEBUG_V(format, args);
     return 0;
 }
@@ -28,15 +30,12 @@ int linx_ebpf_open(linx_ebpf_t *bpf_manager)
 
 int linx_ebpf_load(linx_ebpf_t *bpf_manager)
 {
+    linx_global_config_t *config = linx_config_get();
+
     for (int i = 0; i < LINX_SYSCALL_MAX_IDX; ++i) {
-        // if (g_plugin_config.open_config.interest_syscall_table[i]) {
-        //     LINX_LOG_DEBUG("The %s(%d) syscall is ont interest!",
-        //                    g_linx_syscall_table[i].name, i);
-        //     continue;
-        // }
-        if (i == LINX_SYSCALL_UNLINK || 
-            i == LINX_SYSCALL_UNLINKAT)
-        {
+        if (config->engine.data.ebpf.interest_syscall_table[i]) {
+            LINX_LOG_DEBUG("The %s(%d) syscall is ont interest!",
+                           g_linx_syscall_table[i].name, i);
             continue;
         }
 

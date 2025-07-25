@@ -7,7 +7,7 @@ int linx_output_match_compile(linx_output_match_t **match, char *format);
 
 int linx_output_match_format(linx_output_match_t *match, char *buffer, size_t buffer_size);
 
-int linx_output_match_format_with_base(linx_output_match_t *match, char *buffer, size_t buffer_size, void *base);
+size_t format_field_value(field_result_t *field, char *buffer, size_t buffer_size, size_t total_length);
 
 void linx_output_match_destroy(linx_output_match_t *match);
 

@@ -9,7 +9,7 @@ static uint8_t *g_ringbuf_data;
 
 static int linx_handle_event(void *ctx, void *data, size_t data_sz)
 {
-    linx_event_t *event = (linx_event_t *)data;
+    (void)ctx;
 
     if (data_sz > LINX_EVENT_MAX_SIZE) {
         LINX_LOG_WARNING("The data length of %lu get from ringbuf exceeds the limit of %lu!",

@@ -6,8 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "linx_log_api.h"
-
 #define LINX_MEM_CALLOC(type, var, num, size)   \
     var = (type)calloc(num, size)
 

@@ -25,6 +25,7 @@ static int linx_process_cache_bind_field(void)
         FIELD_MAP(linx_process_info_t, sid, FIELD_TYPE_INT32)
         FIELD_MAP(linx_process_info_t, uid, FIELD_TYPE_INT32)
         FIELD_MAP(linx_process_info_t, gid, FIELD_TYPE_INT32)
+        FIELD_MAP(linx_process_info_t, name, FIELD_TYPE_CHARBUF)
         FIELD_MAP(linx_process_info_t, comm, FIELD_TYPE_CHARBUF)
         FIELD_MAP(linx_process_info_t, cmdline, FIELD_TYPE_CHARBUF)
         FIELD_MAP(linx_process_info_t, exe, FIELD_TYPE_CHARBUF)
@@ -69,6 +70,8 @@ static int read_proc_stat(pid_t pid, linx_process_info_t *info)
 
     strncpy(info->comm, start + 1, name_len);
     info->comm[name_len] = '\0';
+
+    strncpy(info->name, info->comm, name_len + 1);
 
     ret = sscanf(end + 2, " %c %d %d %d %*d %*d %*u %*u %*u %*u %*u %lu %lu "
                  "%*d %*d %d %d %*d %*d %lu %lu %ld",
@@ -130,7 +133,7 @@ static int read_proc_status(pid_t pid, linx_process_info_t *info)
             sscanf(line, "VmRSS:\t%lu kB", &info->rss);
             info->rss *= 1024; /* 转换为字节 */
         } else if (strncmp(line, "RssShmem:", 9) == 0) {
-            sscanf(line, "RssShmem:\t%lu klinx_process_cache_updateB", &info->shared);
+            sscanf(line, "RssShmem:\t%lu kB", &info->shared);
             info->shared *= 1024; /* 转换为字节 */
         }
     }
@@ -288,7 +291,8 @@ static void *monitor_thread_func(void *arg, int *should_stop)
     while (g_process_cache->running && !*should_stop) {
         proc_dir = opendir("/proc");
         if (proc_dir == NULL) {
-            sleep(LINX_PROCESS_CACHE_UPDATE_INTERVAL);
+            // sleep(LINX_PROCESS_CACHE_UPDATE_INTERVAL);
+            usleep(1000 * 100);
             continue;
         }
 
@@ -323,7 +327,8 @@ static void *monitor_thread_func(void *arg, int *should_stop)
 
         pthread_rwlock_unlock(&g_process_cache->lock);
 
-        sleep(LINX_PROCESS_CACHE_UPDATE_INTERVAL);
+        // sleep(LINX_PROCESS_CACHE_UPDATE_INTERVAL);
+        usleep(1000 * 100);
     }
 
     return NULL;
@@ -488,7 +493,7 @@ int linx_process_cache_get_all(linx_process_info_t **list, int *count)
     return 0;
 }
 
-int linx_process_cache_update(pid_t pid)
+int linx_process_cache_update_async(pid_t pid)
 {
     pid_t *pid_arg;
 
@@ -503,6 +508,26 @@ int linx_process_cache_update(pid_t pid)
 
     *pid_arg = pid;
     return linx_thread_pool_add_task(g_process_cache->thread_pool, update_process_task, pid_arg);
+}
+
+int linx_process_cache_update_sync(pid_t pid)
+{
+    pid_t *pid_arg;
+    int tmp = 0;
+
+    if (!g_process_cache) {
+        return -1;
+    }
+
+    pid_arg = malloc(sizeof(pid_t));
+    if (!pid_arg) {
+        return -1;
+    }
+
+    *pid_arg = pid;
+    update_process_task((void *)pid_arg, &tmp);
+
+    return 0;
 }
 
 int linx_process_cache_delete(pid_t pid)

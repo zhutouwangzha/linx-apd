@@ -154,17 +154,31 @@ int linx_output_match_compile(linx_output_match_t **match, char *format)
     return 0;
 }
 
-static size_t format_field_value(segment_t *segment, char *buffer, size_t buffer_size, size_t total_length)
+/**
+ * @brief 格式化字段值并将其追加到缓冲区中。
+ *
+ * 该函数根据字段类型将字段值格式化为字符串，并将其追加到指定的缓冲区中。
+ * 如果字段未找到或值指针为空，则不进行任何操作。
+ *
+ * @param field 指向字段结果结构体的指针，包含字段类型和值信息。
+ * @param buffer 用于存储格式化字符串的缓冲区。
+ * @param buffer_size 缓冲区的总大小。
+ * @param total_length 当前缓冲区中已使用的长度。
+ *
+ * @return 成功时返回格式化后的字段字符串长度；如果缓冲区空间不足则返回 -1。
+ */
+size_t format_field_value(field_result_t *field, char *buffer, size_t buffer_size, size_t total_length)
 {
     size_t field_str_len = 0;
     char field_str[256] = {0};
-    field_result_t *field = &segment->data.variable;
     void *value_ptr = linx_hash_map_get_value_ptr(field);
 
+    // 如果字段未找到或值指针为空，直接返回0
     if (!field->found || value_ptr == NULL) {
         return field_str_len;
     }
 
+    // 根据字段类型格式化字段值为字符串
     switch (field->type) {
     case FIELD_TYPE_INT8:
         field_str_len = snprintf(field_str, sizeof(field_str), "%hhd", *(int8_t *)value_ptr);
@@ -209,11 +223,13 @@ static size_t format_field_value(segment_t *segment, char *buffer, size_t buffer
         break;
     }
 
+    // 将格式化后的字符串追加到缓冲区中（如果空间足够）
     if (field_str_len > 0 && 
         total_length + field_str_len < buffer_size - 1)
     {
         strncat(buffer + total_length, field_str, field_str_len);
     } else if (field_str_len > 0) {
+        // 缓冲区空间不足，返回错误码
         return -1;
     }
 
@@ -248,7 +264,7 @@ int linx_output_match_format(linx_output_match_t *match, char *buffer, size_t bu
             strncat(buffer + total_length, segment->data.literal.text, literal_len);
             total_length += literal_len;
         } else if (segment->type == SEGMENT_TYPE_VARIABLE) {
-            field_len = format_field_value(segment, buffer, buffer_size, total_length);
+            field_len = format_field_value(&segment->data.variable, buffer, buffer_size, total_length);
             if (field_len == 0) {
                 continue;
             }

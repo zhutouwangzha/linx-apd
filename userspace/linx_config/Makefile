@@ -18,7 +18,8 @@ OBJS := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/$(MODULE_NAME)/%.o,$(SRCS))
 
 # 添加包含路径
 CFLAGS += -I$(INCLUDE_DIR) -I$(TOPDIR)/include \
-		  -I$(USR_DIR)/linx_yaml/include
+		  -I$(USR_DIR)/linx_yaml/include \
+		  -I$(DEPENDS_DIR)/cJSON/include
 
 .PHONY: all clean
 

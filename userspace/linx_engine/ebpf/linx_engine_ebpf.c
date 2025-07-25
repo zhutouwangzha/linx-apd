@@ -59,12 +59,12 @@ int ebpf_init(void)
 
 int ebpf_start(void)
 {
-
+    return 0;
 }
 
 int ebpf_stop(void)
 {
-
+    return 0;
 }
 
 int ebpf_next(linx_event_t **event)
@@ -74,7 +74,7 @@ int ebpf_next(linx_event_t **event)
 
 int ebpf_close(void)
 {
-
+    return 0;
 }
 
 linx_engine_vtable_t ebpf_vtable = {

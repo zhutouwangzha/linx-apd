@@ -23,7 +23,11 @@ engine:
   kmod:
     log_path: /tmp/ebpf.log
   ebpf:
-    drop_failed_exit: true
+    drop_mode: false
+    drop_failed: true
+    filter_pids: []
+    filter_comms: []
+    interest_syscall_file: /root/project/linx_apd/json_config/interesting_syscalls.json
 
 # 要加载的插件
 load_plugins: [json, k8s]

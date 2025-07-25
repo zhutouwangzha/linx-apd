@@ -40,6 +40,8 @@ static int linx_event_rich_bind_field(void)
         LINX_LOG_ERROR("linx_hash_map_add_field_batch failed");
         return -1;
     }
+
+    return ret;
 }
 
 int linx_event_rich_init(void)
@@ -67,11 +69,18 @@ int linx_event_rich(linx_event_t *event)
 
     snprintf(evt.time + len, sizeof(evt.time) - len, ".%09lu", remaining_ns);
 
+    if (event->type == LINX_SYSCALL_TYPE_ENTER && 
+        event->syscall_id == LINX_SYSCALL_EXECVE)
+    {
+        // printf("com: %s\n cmdline: %s\n", event->comm, event->cmdline);
+        ret = linx_process_cache_update_sync(event->pid);
+    }
+
     evt.num = event->syscall_id;
     event->type == LINX_SYSCALL_TYPE_ENTER ? 
         strcpy(evt.dir, ">") : 
         strcpy(evt.dir, "<");
-    evt.type = g_linx_syscall_table[event->syscall_id].name;
+    evt.type = (char *)g_linx_syscall_table[event->syscall_id].name;
     evt.rawres = (int64_t)event->res;
     if (evt.rawres == 0) {
         evt.failed = false;
@@ -79,6 +88,11 @@ int linx_event_rich(linx_event_t *event)
     } else {
         evt.failed = true;
         strcpy(evt.res, "ERRNO");
+    }
+
+    if (strcmp(event->comm, "find") == 0)
+    {
+        printf("11");
     }
 
     ret = update_field_base(event->pid);

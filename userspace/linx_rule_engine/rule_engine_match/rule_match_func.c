@@ -1,8 +1,34 @@
 #include <string.h>
+#include <ctype.h>
 
 #include "rule_match_func.h"
 #include "rule_match_struct.h"
 #include "rule_match_context.h"
+#include "output_match_func.h"
+
+static char *linx_str_lower(char *str)
+{
+    char *lower, *p;
+    
+    if (!str) {
+        return NULL;
+    }
+
+    lower =  malloc(strlen(str) + 1);
+    if (!lower) {
+        return NULL;
+    }
+
+    p = lower;
+
+    while (*str) {
+        *p++ = tolower((unsigned char)*str++);
+    }
+    
+    *p = '\0';
+
+    return lower;
+}
 
 bool and_matcher(void *context)
 {
@@ -87,21 +113,149 @@ bool str_assign_matcher(void *context)
     int ret;
     str_context_t *ctx = (str_context_t *)context;
     char *value_ptr = linx_hash_map_get_value_ptr(&ctx->field);
-
-    if (ctx->field.size != ctx->str_len) {
-        return false;
-    }
+    char *value;
+    char buffer[256] = {0};
 
     switch (ctx->field.type) {
     case FIELD_TYPE_CHARBUF:
-        ret = strncmp(value_ptr, ctx->str, ctx->field.size);
+        value = value_ptr;
         break;
-    case FILED_TYPE_CHARBUF_ARRAY: 
-        ret = strncmp((char *)(*(uint64_t *)value_ptr), ctx->str, ctx->field.size);
+    case FILED_TYPE_CHARBUF_ARRAY:
+        value = (char *)(*(uint64_t *)value_ptr);
         break;
     default:
+        ret = format_field_value(&ctx->field, buffer, sizeof(buffer), 0);
+        if (ret <= 0) {
+            return false;
+        }
+
+        value = buffer;
         break;
     }
 
+    if (strlen(value) != ctx->str_len) {
+        return false;
+    }
+
+    ret = strncmp(value, ctx->str, ctx->str_len);
+
     return (ret == 0) ? true : false;
+}
+
+bool str_ne_matcher(void *context)
+{
+    return !str_assign_matcher(context);
+}
+
+bool str_contains_matcher(void *context)
+{
+    str_context_t *ctx = (str_context_t *)context;
+    char *value_ptr = linx_hash_map_get_value_ptr(&ctx->field);
+    char *value;
+    const char *result;
+
+    switch (ctx->field.type) {
+    case FIELD_TYPE_CHARBUF:
+        value = value_ptr;
+        break;
+    case FILED_TYPE_CHARBUF_ARRAY:
+        value = (char *)(*(uint64_t *)value_ptr);
+        break;
+    default:
+        return false;
+        break;
+    }
+
+    result = strstr(value, ctx->str);
+
+    return (result != NULL) ? true : false;
+}
+
+bool str_icontains_matcher(void *context)
+{
+    str_context_t *ctx = (str_context_t *)context;
+    char *value_ptr = linx_hash_map_get_value_ptr(&ctx->field);
+    char *value, *lower1, *lower2;
+    const char *result;
+
+    switch (ctx->field.type) {
+    case FIELD_TYPE_CHARBUF:
+        value = value_ptr;
+        break;
+    case FILED_TYPE_CHARBUF_ARRAY:
+        value = (char *)(*(uint64_t *)value_ptr);
+        break;
+    default:
+        return false;
+        break;
+    }
+
+    lower1 = linx_str_lower(value);
+    lower2 = linx_str_lower(ctx->str);
+
+    if (lower1 && lower2) {
+        result = strstr(lower1, lower2);
+    } else {
+        return false;
+    }
+
+    free(lower1);
+    free(lower2);
+
+    return (result != NULL) ? true : false;
+}
+
+bool str_startswith_matcher(void *context)
+{
+    str_context_t *ctx = (str_context_t *)context;
+    char *value_ptr = linx_hash_map_get_value_ptr(&ctx->field);
+    char *value;
+
+    switch (ctx->field.type) {
+    case FIELD_TYPE_CHARBUF:
+        value = value_ptr;
+        break;
+    case FILED_TYPE_CHARBUF_ARRAY:
+        value = (char *)(*(uint64_t *)value_ptr);
+        break;
+    default:
+        return false;
+        break;
+    }
+
+    if (ctx->str_len > strlen(value)) {
+        return false;
+    }
+
+    return strncmp(value, ctx->str, ctx->str_len) == 0;
+}
+
+bool str_endswith_matcher(void *context)
+{
+    str_context_t *ctx = (str_context_t *)context;
+    char *value_ptr = linx_hash_map_get_value_ptr(&ctx->field);
+    char *value;
+    size_t value_len;
+
+    switch (ctx->field.type) {
+    case FIELD_TYPE_CHARBUF:
+        value = value_ptr;
+        break;
+    case FILED_TYPE_CHARBUF_ARRAY:
+        value = (char *)(*(uint64_t *)value_ptr);
+        break;
+    default:
+        return false;
+        break;
+    }
+
+    value_len = strlen(value);
+
+    if (ctx->str_len > value_len) {
+        return false;
+    }
+
+    value = value + (value_len - ctx->str_len);
+
+    return strncmp(value, ctx->str, ctx->str_len) == 0;
 }

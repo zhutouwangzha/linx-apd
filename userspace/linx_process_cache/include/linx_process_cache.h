@@ -24,7 +24,9 @@ linx_process_info_t *linx_process_cache_get(pid_t pid);
 
 int linx_process_cache_get_all(linx_process_info_t **list, int *count);
 
-int linx_process_cache_update(pid_t pid);
+int linx_process_cache_update_async(pid_t pid);
+
+int linx_process_cache_update_sync(pid_t pid);
 
 int linx_process_cache_delete(pid_t pid);
 

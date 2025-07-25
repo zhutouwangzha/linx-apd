@@ -174,22 +174,27 @@ static linx_rule_match_t *compile_binary_str_node(ast_node_t *node)
         match->func = str_assign_matcher;
         break;
     case BINARY_STR_OP_NE:
+        match->func = str_ne_matcher;
         break;
     case BINARY_STR_OP_GLOB:
         break;
     case BINARY_STR_OP_IGLOB:
         break;
     case BINARY_STR_OP_CONTAINS:
+        match->func = str_contains_matcher;
         break;
     case BINARY_STR_OP_ICONTAINS:
+        match->func = str_icontains_matcher;
         break;
     case BINARY_STR_OP_BCONTAINS:
         break;
     case BINARY_STR_OP_STARTSWITH:
+        match->func = str_startswith_matcher;
         break;
     case BINARY_STR_OP_BSTARTSWITH:
         break;
     case BINARY_STR_OP_ENDSWITH:
+        match->func = str_endswith_matcher;
         break;
     case BINARY_STR_OP_REGEX:
         break;

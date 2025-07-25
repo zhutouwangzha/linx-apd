@@ -30,6 +30,7 @@ typedef struct {
     pid_t uid;
     pid_t gid;
 
+    char name[PROC_COMM_MAX_LEN];
     char comm[PROC_COMM_MAX_LEN];
     char cmdline[PROC_CMDLINE_LEN];
     char exe[PROC_PATH_MAX_LEN];

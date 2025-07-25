@@ -4,6 +4,7 @@
 #include "linx_ebpf_common.h"
 #include "linx_ebpf_api.h"
 #include "linx_syscall_table.h"
+#include "linx_config.h"
 
 int linx_ebpf_maps_before_load(linx_ebpf_t *bpf_manager)
 {
@@ -29,38 +30,37 @@ void linx_ebpf_set_boot_time(struct linx_bpf *skel, uint64_t boot_time)
 
 void linx_ebpf_set_filter_pids(struct linx_bpf *skel)
 {
-    // for (int i = 0; 
-    //      i < LINX_BPF_FILTER_PID_MAX_SIZE &&
-    //      g_plugin_config.open_config.filter_pids[i]; 
-    //      ++i)
-    // {
-    //     skel->bss->g_filter_pids[i] = g_plugin_config.open_config.filter_pids[i];
-    // }
+    linx_global_config_t *config = linx_config_get();
+
+    for (int i = 0; 
+         i < LINX_BPF_FILTER_PID_MAX_SIZE &&
+         config->engine.data.ebpf.filter_pids[i]; 
+         ++i)
+    {
+        skel->bss->g_filter_pids[i] = config->engine.data.ebpf.filter_pids[i];
+    }
 }
 
 void linx_ebpf_set_filter_comms(struct linx_bpf *skel)
 {
-    // size_t byte_write = 0, buf_size = LINX_COMM_MAX_SIZE;
+    int byte_write, buf_size = LINX_COMM_MAX_SIZE;
+    linx_global_config_t *config = linx_config_get();
 
-    // for (int i = 0;
-    //      i < LINX_BPF_FILTER_COMM_MAX_SIZE &&
-    //      g_plugin_config.open_config.filter_comms[i][0] != 0;
-    //      ++i)
-    // {
-    //     if (LINX_SNPRINTF(byte_write, 
-    //                       (char *)skel->bss->g_filter_comms[i],
-    //                       buf_size, 
-    //                       "%s",
-    //                       (char *)g_plugin_config.open_config.filter_comms[i]) < 0)
-    //     {
-
-    //         LINX_LOG_WARNING("Failed when copy %d bytes '%s' str to %lu bytes buf for %d time!", 
-    //                          strlen((char *)g_plugin_config.open_config.filter_comms[i]), 
-    //                          (char *)g_plugin_config.open_config.filter_comms[i], 
-    //                          buf_size, 
-    //                          i);
-    //     }
-    // }
+    for (int i = 0;
+         i < LINX_BPF_FILTER_COMM_MAX_SIZE &&
+         config->engine.data.ebpf.filter_comms[i][0] != 0;
+         ++i)
+    {
+        byte_write = snprintf((char *)skel->bss->g_filter_comms[i], buf_size, "%s", 
+                              (char *)config->engine.data.ebpf.filter_comms[i]);
+        if (byte_write < 0) {
+            LINX_LOG_WARNING("Failed when copy %d bytes '%s' str to %lu bytes buf for %d time!", 
+                             strlen((char *)config->engine.data.ebpf.filter_comms[i]), 
+                             (char *)config->engine.data.ebpf.filter_comms[i], 
+                             buf_size, 
+                             i);
+        }
+    }
 }
 
 void linx_ebpf_set_drop_mode(struct linx_bpf *skel, uint8_t value)
@@ -75,13 +75,12 @@ void linx_ebpf_set_drop_failed(struct linx_bpf *skel, uint8_t value)
 
 void linx_ebpf_set_interesting_syscalls_table(struct linx_bpf *skel)
 {
-    // for (int i = 0; i < LINX_SYSCALL_MAX_IDX; ++i) {
-    //     skel->bss->g_interesting_syscalls_table[i] =
-    //         g_plugin_config.open_config.interest_syscall_table[i];
-    // }
-    /* 这里没有配置 先只测这两个系统调用 */
-    skel->bss->g_interesting_syscalls_table[LINX_SYSCALL_UNLINK] = 1;
-    skel->bss->g_interesting_syscalls_table[LINX_SYSCALL_UNLINKAT] = 1;
+    linx_global_config_t *config = linx_config_get();
+
+    for (int i = 0; i < LINX_SYSCALL_MAX_IDX; ++i) {
+        skel->bss->g_interesting_syscalls_table[i] =
+            config->engine.data.ebpf.interest_syscall_table[i];
+    }
 }
 
 static int linx_ebpf_add_prog_to_tail_table(struct linx_bpf *skel, int tail_tabld_fd,
@@ -118,18 +117,13 @@ int linx_ebpf_load_tail_call_map(struct linx_bpf *skel)
     int enter_table_fd = bpf_map__fd(skel->maps.syscall_enter_tail_table);
     int exit_table_fd = bpf_map__fd(skel->maps.syscall_exit_tail_table);
     const char *enter_name, *exit_name;
+    linx_global_config_t *config = linx_config_get();
 
     for (int syscall_id = 0; syscall_id < LINX_SYSCALL_MAX_IDX; ++syscall_id) {
-        // if (!g_plugin_config.open_config.interest_syscall_table[syscall_id]) {
-        //     LINX_LOG_DEBUG("The %s(%d) syscall is ont interest!",
-        //                    g_linx_syscall_table[syscall_id].name, syscall_id);
-        //     continue;
-        // }
-        /* 这里没有配置 先只测这两个系统调用 */
-        if (syscall_id != LINX_SYSCALL_UNLINK &&
-            syscall_id != LINX_SYSCALL_UNLINKAT) 
-        {
-                continue;
+        if (!config->engine.data.ebpf.interest_syscall_table[syscall_id]) {
+            LINX_LOG_DEBUG("The %s(%d) syscall is ont interest!",
+                           g_linx_syscall_table[syscall_id].name, syscall_id);
+            continue;
         }
 
         enter_name = g_linx_syscall_table[syscall_id].ebpf_prog_name[LINX_SYSCALL_TYPE_ENTER];

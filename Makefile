@@ -32,11 +32,12 @@ INCLUDE := -I$(TOPDIR)/include -I$(USR_DIR)/linx_arg_parser/include \
 
 CFLAGS 	:= -Wall -Wextra -g $(INCLUDE) \
 		   -DPCRE2_CODE_UNIT_WIDTH=8		# 这是pcre2库的编译选项，指定UTF8编码
-LDFLAGS := -lpthread -lyaml -lpcre2-8 -lbpf
+LDFLAGS := -lpthread -lyaml -lpcre2-8 -lbpf -lcjson
 
 # 三方库目录
 LOCAL_LIB_DIR := -L$(DEPENDS_DIR)/libyaml/libs \
-				 -L$(DEPENDS_DIR)/pcre2/libs
+				 -L$(DEPENDS_DIR)/pcre2/libs \
+				 -L$(DEPENDS_DIR)/cJSON/libs
 
 # 获取所有包含Makefile的userspace子目录(排除linx_apd)
 USERSPACE_DIRS := $(shell find $(USR_DIR) -mindepth 1 -maxdepth 1 -type d)
@@ -58,9 +59,11 @@ EXECUTABLE := $(BIN_DIR)/linx-apd
 
 export TOPDIR CC CFLAGS LDFLAGS BUILD_DIR DEPENDS_DIR USR_DIR KERNEL_DIR EBPF_DIR
 
-.PHONY: all clean $(LIBRARY_DIRS) ebpf
+.PHONY: all clean $(LIBRARY_DIRS) ebpf linx_apd
 
-all: ebpf $(EXECUTABLE)
+all: ebpf linx_apd
+
+linx_apd: $(EXECUTABLE)
 
 ebpf: $(EBPF_DIR)
 	@echo "[Build module]: $^"
@@ -70,7 +73,7 @@ ebpf: $(EBPF_DIR)
 $(EXECUTABLE): $(LIBRARIES) $(LINX_APD_OBJS)
 	@echo "[Link]: $@"
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(LINX_APD_OBJS) -L$(LIB_DIR) $(LOCAL_LIB_DIR) -Wl,--start-group $(LINK_LIBS) $(LDFLAGS) -Wl,--end-group -o $@
+	@$(CC) $(CFLAGS) $(LINX_APD_OBJS) -L$(LIB_DIR) $(LOCAL_LIB_DIR) -Wl,--start-group $(LINK_LIBS) $(LDFLAGS) -Wl,--end-group -o $@
 
 # 编译主程序
 $(OBJ_DIR)/linx_apd/%.o: $(LINX_APD_DIR)/%.c
