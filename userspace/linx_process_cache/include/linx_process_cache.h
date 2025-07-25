@@ -7,13 +7,12 @@
 #include "linx_thread_pool.h"
 
 typedef struct {
-    linx_process_info_t *hash_table;
     pthread_rwlock_t lock;
-
+    linx_process_info_t *hash_table;
     linx_thread_pool_t *thread_pool;
     int running;
-    pthread_t monitor_thread;
-    pthread_t cleaner_thread;
+    int inotify_fd;                    /* inotify文件描述符 */
+    int proc_watch_fd;                 /* /proc目录的监控描述符 */
 } linx_process_cache_t;
 
 int linx_process_cache_init(void);
@@ -33,5 +32,7 @@ int linx_process_cache_delete(pid_t pid);
 int linx_process_cache_cleanup(void);
 
 void linx_process_cache_stats(int *total, int *alive, int *expired);
+
+int linx_process_cache_get_monitor_status(char *status_buf, size_t buf_size);
 
 #endif /* __LINX_PROCESS_CACHE_H__ */
