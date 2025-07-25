@@ -33,6 +33,8 @@ int linx_process_cache_cleanup(void);
 
 void linx_process_cache_stats(int *total, int *alive, int *expired);
 
+int linx_process_cache_create_from_event(pid_t pid, const char *comm, const char *cmdline);
+
 int linx_process_cache_get_monitor_status(char *status_buf, size_t buf_size);
 
 #endif /* __LINX_PROCESS_CACHE_H__ */

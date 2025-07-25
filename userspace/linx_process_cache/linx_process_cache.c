@@ -785,6 +785,71 @@ int linx_process_cache_cleanup(void)
     return cleaned;
 }
 
+int linx_process_cache_create_from_event(pid_t pid, const char *comm, const char *cmdline)
+{
+    linx_process_info_t *info, *old_info;
+    
+    if (!g_process_cache) {
+        return -1;
+    }
+    
+    // 先检查是否已经存在
+    pthread_rwlock_rdlock(&g_process_cache->lock);
+    HASH_FIND_INT(g_process_cache->hash_table, &pid, old_info);
+    pthread_rwlock_unlock(&g_process_cache->lock);
+    
+    if (old_info) {
+        // 已存在，只需要标记为已退出（因为是EXIT事件触发的）
+        pthread_rwlock_wrlock(&g_process_cache->lock);
+        if (old_info->is_alive) {
+            old_info->is_alive = 0;
+            old_info->exit_time = time(NULL);
+            old_info->state = LINX_PROCESS_STATE_EXITED;
+        }
+        pthread_rwlock_unlock(&g_process_cache->lock);
+        return 0;
+    }
+    
+    // 创建新的进程信息项（基于事件数据）
+    info = calloc(1, sizeof(linx_process_info_t));
+    if (!info) {
+        return -1;
+    }
+    
+    // 填充基本信息
+    info->pid = pid;
+    info->create_time = time(NULL);
+    info->update_time = info->create_time;
+    info->exit_time = info->create_time; // 进程已退出
+    info->is_alive = 0; // 标记为已退出
+    info->state = LINX_PROCESS_STATE_EXITED;
+    
+    // 从事件数据中获取进程名和命令行
+    if (comm) {
+        strncpy(info->name, comm, sizeof(info->name) - 1);
+        info->name[sizeof(info->name) - 1] = '\0';
+        strncpy(info->comm, comm, sizeof(info->comm) - 1);
+        info->comm[sizeof(info->comm) - 1] = '\0';
+    }
+    
+    if (cmdline) {
+        strncpy(info->cmdline, cmdline, sizeof(info->cmdline) - 1);
+        info->cmdline[sizeof(info->cmdline) - 1] = '\0';
+    }
+    
+    // 其他字段保持默认值（0）
+    
+    // 添加到缓存
+    pthread_rwlock_wrlock(&g_process_cache->lock);
+    HASH_ADD_INT(g_process_cache->hash_table, pid, info);
+    pthread_rwlock_unlock(&g_process_cache->lock);
+    
+    printf("INFO: Created process cache from event data for short-lived process %d (%s)\n", 
+           pid, comm ? comm : "unknown");
+    
+    return 0;
+}
+
 void linx_process_cache_stats(int *total, int *alive, int *expired)
 {
     int t = 0, a = 0, e = 0;

@@ -71,9 +71,25 @@ int linx_event_rich(linx_event_t *event)
 
     if (event->syscall_id == LINX_SYSCALL_EXECVE)
     {
-        // 对于execve系统调用，无论ENTER还是EXIT都同步更新进程缓存
-        // 这样可以确保短生命周期进程（如find命令）的信息能被正确获取
-        ret = linx_process_cache_update_sync(event->pid);
+        if (event->type == LINX_SYSCALL_TYPE_ENTER) {
+            // ENTER事件：预先同步更新进程缓存，为后续EXIT事件做准备
+            printf("DEBUG: EXECVE ENTER - PID:%lu COMM:%s CMDLINE:%s\n", 
+                   event->pid, event->comm, event->cmdline);
+            ret = linx_process_cache_update_sync(event->pid);
+        } else {
+            // EXIT事件：进程可能已退出，尝试从缓存获取信息
+            printf("DEBUG: EXECVE EXIT - PID:%lu COMM:%s CMDLINE:%s\n", 
+                   event->pid, event->comm, event->cmdline);
+            // 如果缓存中没有，说明是极短生命周期进程，尝试从事件中获取基本信息
+            linx_process_info_t *cached_info = linx_process_cache_get(event->pid);
+            if (!cached_info) {
+                printf("DEBUG: No cached info found for PID %lu, creating from event data\n", event->pid);
+                // 对于极短生命周期进程，尝试从事件数据中创建基本缓存项
+                ret = linx_process_cache_create_from_event(event->pid, event->comm, event->cmdline);
+            } else {
+                printf("DEBUG: Found cached info for PID %lu: %s\n", event->pid, cached_info->name);
+            }
+        }
     }
 
     evt.num = event->syscall_id;
@@ -89,10 +105,30 @@ int linx_event_rich(linx_event_t *event)
         evt.failed = true;
         strcpy(evt.res, "ERRNO");
     }
+    
+    // 对于EXECVE EXIT事件，确保进程信息在规则匹配前存在于缓存中
+    if (event->syscall_id == LINX_SYSCALL_EXECVE && event->type == LINX_SYSCALL_TYPE_EXIT) {
+        linx_process_info_t *proc_info = linx_process_cache_get(event->pid);
+        if (!proc_info) {
+            printf("DEBUG: EXECVE EXIT - No process cache found for PID %lu, creating from event\n", event->pid);
+            linx_process_cache_create_from_event(event->pid, event->comm, event->cmdline);
+        }
+    }
 
+    // 针对find命令进行特殊调试
     if (strcmp(event->comm, "find") == 0)
     {
-        printf("11");
+        printf("DEBUG: Processing find command - PID:%lu DIR:%s\n", event->pid, evt.dir);
+        
+        // 确保进程信息在hash map更新前存在
+        linx_process_info_t *proc_info = linx_process_cache_get(event->pid);
+        if (!proc_info) {
+            printf("DEBUG: find process not in cache, creating emergency cache entry\n");
+            linx_process_cache_create_from_event(event->pid, event->comm, event->cmdline);
+        } else {
+            printf("DEBUG: find process found in cache: name=%s cmdline=%s\n", 
+                   proc_info->name, proc_info->cmdline);
+        }
     }
 
     ret = update_field_base(event->pid);
