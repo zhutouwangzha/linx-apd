@@ -60,6 +60,14 @@ bool or_matcher(void *context)
     return result || right->func(right->context);
 }
 
+bool not_matcher(void *context)
+{
+    unary_context_t *ctx = (unary_context_t *)context;
+    linx_rule_match_t *op = (linx_rule_match_t *)ctx->operand;
+
+    return !(op->func(op->context));
+}
+
 bool num_gt_matcher(void *context)
 {
     num_context_t *ctx = (num_context_t *)context;
@@ -258,4 +266,45 @@ bool str_endswith_matcher(void *context)
     value = value + (value_len - ctx->str_len);
 
     return strncmp(value, ctx->str, ctx->str_len) == 0;
+}
+
+bool list_in_matcher(void *context)
+{
+    int ret;
+    list_context_t *ctx = (list_context_t *)context;
+    char *value_ptr = linx_hash_map_get_value_ptr(&ctx->field);
+    char *value;
+    size_t value_len;
+    char buffer[256] = {0};
+
+    switch (ctx->field.type) {
+    case FIELD_TYPE_CHARBUF:
+        value = value_ptr;
+        break;
+    case FILED_TYPE_CHARBUF_ARRAY:
+        value = (char *)(*(uint64_t *)value_ptr);
+        break;
+    default:
+        ret = format_field_value(&ctx->field, buffer, sizeof(buffer), 0);
+        if (ret <= 0) {
+            return false;
+        }
+
+        value = buffer;
+        break;
+    }
+
+    value_len = strlen(value);
+
+    for (size_t i = 0; i < ctx->list_count; ++i) {
+        if (value_len != ctx->list_len[i]) {
+            continue;
+        }
+
+        if (strncmp(value, ctx->list[i], ctx->list_len[i]) == 0) {
+            return true;
+        }
+    }
+
+    return false;
 }

@@ -1,7 +1,7 @@
 {
     "read": {
       "syscall_id": 0,
-      "interesting": 1
+      "interesting": 0
     },
     "write": {
       "syscall_id": 1,
@@ -29,7 +29,7 @@
     },
     "poll": {
       "syscall_id": 7,
-      "interesting": 0
+      "interesting": 1
     },
     "lseek": {
       "syscall_id": 8,
@@ -65,7 +65,7 @@
     },
     "ioctl": {
       "syscall_id": 16,
-      "interesting": 0
+      "interesting": 1
     },
     "pread64": {
       "syscall_id": 17,
@@ -165,7 +165,7 @@
     },
     "socket": {
       "syscall_id": 41,
-      "interesting": 0
+      "interesting": 1
     },
     "connect": {
       "syscall_id": 42,
