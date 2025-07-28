@@ -3,16 +3,18 @@
 #include <string.h>
 #include <unistd.h>
 #include <dirent.h>
-#include <ctype.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <time.h>
 #include <signal.h>
+#include <time.h>
+#include <ctype.h>
+#include <sys/stat.h>
+#include <sys/inotify.h>
+#include <pthread.h>
 
 #include "linx_process_cache.h"
 #include "linx_hash_map.h"
+#include "linx_log.h"
 
 static linx_process_cache_t *g_process_cache = NULL;
 
@@ -255,6 +257,15 @@ static void *update_process_task(void *arg, int *should_stop)
 
     info = create_process_info(pid);
     if (!info) {
+        // 如果无法创建进程信息，可能是进程已退出
+        // 检查是否有已存在的缓存项，如果有则标记为已退出
+        pthread_rwlock_wrlock(&g_process_cache->lock);
+        HASH_FIND_INT(g_process_cache->hash_table, &pid, old_info);
+        if (old_info && old_info->is_alive) {
+            old_info->is_alive = 0;
+            old_info->exit_time = time(NULL);
+        }
+        pthread_rwlock_unlock(&g_process_cache->lock);
         return NULL;
     }
 
@@ -280,7 +291,128 @@ static void *update_process_task(void *arg, int *should_stop)
     return NULL;
 }
 
-static void *monitor_thread_func(void *arg, int *should_stop)
+/**
+ * 解析inotify事件中的进程ID
+ */
+static pid_t extract_pid_from_name(const char *name)
+{
+    if (!name || !isdigit(name[0])) {
+        return -1;
+    }
+    
+    pid_t pid = atoi(name);
+    return (pid > 0) ? pid : -1;
+}
+
+/**
+ * 处理进程创建事件
+ */
+static void handle_process_create(pid_t pid)
+{
+    pid_t *pid_arg = malloc(sizeof(pid_t));
+    if (pid_arg) {
+        *pid_arg = pid;
+        if (linx_thread_pool_add_task(g_process_cache->thread_pool, update_process_task, pid_arg) < 0) {
+            free(pid_arg);
+        }
+    }
+}
+
+/**
+ * 处理进程删除事件
+ */
+static void handle_process_delete(pid_t pid)
+{
+    linx_process_info_t *info;
+    
+    pthread_rwlock_wrlock(&g_process_cache->lock);
+    HASH_FIND_INT(g_process_cache->hash_table, &pid, info);
+    if (info && info->is_alive) {
+        info->is_alive = 0;
+        info->exit_time = time(NULL);
+        info->state = LINX_PROCESS_STATE_EXITED;
+    }
+    pthread_rwlock_unlock(&g_process_cache->lock);
+}
+
+/**
+ * 基于inotify的/proc文件系统监控线程
+ * 实时监控进程的创建和删除，相比轮询方式更加高效
+ */
+static void *inotify_monitor_thread_func(void *arg, int *should_stop)
+{
+    (void)arg;
+    char buffer[LINX_PROCESS_CACHE_INOTIFY_BUFFER_SIZE];
+    ssize_t length;
+    struct inotify_event *event;
+    char *ptr;
+    pid_t pid;
+    fd_set read_fds;
+    struct timeval timeout;
+    int ret;
+
+    while (g_process_cache->running && !*should_stop) {
+        // 使用select进行超时控制，避免阻塞太久
+        FD_ZERO(&read_fds);
+        FD_SET(g_process_cache->inotify_fd, &read_fds);
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+
+        ret = select(g_process_cache->inotify_fd + 1, &read_fds, NULL, NULL, &timeout);
+        
+        if (ret < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            printf("ERROR: select failed: %s\n", strerror(errno));
+            break;
+        } else if (ret == 0) {
+            // 超时，继续下一轮循环
+            continue;
+        }
+
+        if (!FD_ISSET(g_process_cache->inotify_fd, &read_fds)) {
+            continue;
+        }
+
+        length = read(g_process_cache->inotify_fd, buffer, sizeof(buffer));
+        if (length < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                continue;
+            }
+            printf("ERROR: read inotify events failed: %s\n", strerror(errno));
+            break;
+        }
+
+        // 处理inotify事件
+        ptr = buffer;
+        while (ptr < buffer + length) {
+            event = (struct inotify_event *)ptr;
+            
+            if (event->len > 0) {
+                pid = extract_pid_from_name(event->name);
+                if (pid > 0) {
+                    if (event->mask & IN_CREATE) {
+                        // 进程创建事件
+                        handle_process_create(pid);
+                    } else if (event->mask & IN_DELETE) {
+                        // 进程删除事件
+                        handle_process_delete(pid);
+                    }
+                }
+            }
+            
+            ptr += sizeof(struct inotify_event) + event->len;
+        }
+    }
+
+    return NULL;
+}
+
+/**
+ * 轮询模式的监控线程（作为备用方案）
+ */
+static void *polling_monitor_thread_func(void *arg, int *should_stop)
 {
     (void)arg;
     DIR *proc_dir;
@@ -291,7 +423,6 @@ static void *monitor_thread_func(void *arg, int *should_stop)
     while (g_process_cache->running && !*should_stop) {
         proc_dir = opendir("/proc");
         if (proc_dir == NULL) {
-            // sleep(LINX_PROCESS_CACHE_UPDATE_INTERVAL);
             usleep(1000 * 100);
             continue;
         }
@@ -309,7 +440,9 @@ static void *monitor_thread_func(void *arg, int *should_stop)
             pid_arg = malloc(sizeof(pid_t));
             if (pid_arg) {
                 *pid_arg = pid;
-                linx_thread_pool_add_task(g_process_cache->thread_pool, update_process_task, pid_arg);
+                if (linx_thread_pool_add_task(g_process_cache->thread_pool, update_process_task, pid_arg) < 0) {
+                    free(pid_arg);
+                }
             }
         }
 
@@ -327,7 +460,6 @@ static void *monitor_thread_func(void *arg, int *should_stop)
 
         pthread_rwlock_unlock(&g_process_cache->lock);
 
-        // sleep(LINX_PROCESS_CACHE_UPDATE_INTERVAL);
         usleep(1000 * 100);
     }
 
@@ -349,10 +481,20 @@ static void *cleaner_thread_func(void *arg, int *should_stop)
 
         HASH_ITER(hh, g_process_cache->hash_table, info, tmp) {
             /* 清理已退出且超过保留时间的进程 */
-            if (!info->is_alive && info->exit_time > 0 &&
-                (now - info->exit_time) > LINX_PROCESS_CACHE_EXPIRE_TIME) {
-                HASH_DEL(g_process_cache->hash_table, info);
-                free_process_info(info);
+            if (!info->is_alive && info->exit_time > 0) {
+                time_t retain_time;
+                // 对于短生命周期进程（存活时间很短），使用较短的保留时间
+                // 这样可以在保证规则匹配的同时，避免缓存占用过多内存
+                if ((info->exit_time - info->create_time) <= 5) {
+                    retain_time = LINX_PROCESS_CACHE_SHORT_LIVED_RETAIN_TIME;
+                } else {
+                    retain_time = LINX_PROCESS_CACHE_EXPIRE_TIME;
+                }
+                
+                if ((now - info->exit_time) > retain_time) {
+                    HASH_DEL(g_process_cache->hash_table, info);
+                    free_process_info(info);
+                }
             }
         }
 
@@ -362,8 +504,53 @@ static void *cleaner_thread_func(void *arg, int *should_stop)
     return NULL;
 }
 
+/**
+ * 初始化inotify监控
+ */
+static int init_inotify_monitor(void)
+{
+    // 创建inotify实例
+    g_process_cache->inotify_fd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
+    if (g_process_cache->inotify_fd < 0) {
+        printf("ERROR: Failed to initialize inotify: %s\n", strerror(errno));
+        return -1;
+    }
+
+    // 监控/proc目录
+    g_process_cache->proc_watch_fd = inotify_add_watch(g_process_cache->inotify_fd, 
+                                                       "/proc", 
+                                                       IN_CREATE | IN_DELETE);
+    if (g_process_cache->proc_watch_fd < 0) {
+        printf("ERROR: Failed to add /proc to inotify watch: %s\n", strerror(errno));
+        close(g_process_cache->inotify_fd);
+        g_process_cache->inotify_fd = -1;
+        return -1;
+    }
+
+    printf("INFO: Successfully initialized inotify monitor for /proc filesystem\n");
+    return 0;
+}
+
+/**
+ * 清理inotify监控
+ */
+static void cleanup_inotify_monitor(void)
+{
+    if (g_process_cache->proc_watch_fd >= 0) {
+        inotify_rm_watch(g_process_cache->inotify_fd, g_process_cache->proc_watch_fd);
+        g_process_cache->proc_watch_fd = -1;
+    }
+    
+    if (g_process_cache->inotify_fd >= 0) {
+        close(g_process_cache->inotify_fd);
+        g_process_cache->inotify_fd = -1;
+    }
+}
+
 int linx_process_cache_init(void)
 {
+    void *(*monitor_func)(void *, int *) = NULL;
+    
     if (g_process_cache) {
         return 0;
     }
@@ -376,6 +563,10 @@ int linx_process_cache_init(void)
     if (!g_process_cache) {
         return -1;
     }
+
+    // 初始化inotify相关字段
+    g_process_cache->inotify_fd = -1;
+    g_process_cache->proc_watch_fd = -1;
 
     if (pthread_rwlock_init(&g_process_cache->lock, NULL) != 0) {
         free(g_process_cache);
@@ -393,7 +584,17 @@ int linx_process_cache_init(void)
 
     g_process_cache->running = 1;
 
-    if (linx_thread_pool_add_task(g_process_cache->thread_pool, monitor_thread_func, NULL) < 0) {
+         // 尝试初始化inotify监控，如果失败则使用轮询模式
+    if (init_inotify_monitor() == 0) {
+        monitor_func = inotify_monitor_thread_func;
+        printf("INFO: Using inotify-based process monitoring (real-time)\n");
+    } else {
+        monitor_func = polling_monitor_thread_func;
+        printf("WARN: Fallback to polling-based process monitoring\n");
+    }
+
+    if (linx_thread_pool_add_task(g_process_cache->thread_pool, monitor_func, NULL) < 0) {
+        cleanup_inotify_monitor();
         linx_thread_pool_destroy(g_process_cache->thread_pool, 0);
         pthread_rwlock_destroy(&g_process_cache->lock);
         free(g_process_cache);
@@ -403,6 +604,7 @@ int linx_process_cache_init(void)
 
     if (linx_thread_pool_add_task(g_process_cache->thread_pool, cleaner_thread_func, NULL) < 0) {
         g_process_cache->running = 0;
+        cleanup_inotify_monitor();
         linx_thread_pool_destroy(g_process_cache->thread_pool, 0);
         pthread_rwlock_destroy(&g_process_cache->lock);
         free(g_process_cache);
@@ -421,6 +623,9 @@ void linx_process_cache_deinit(void)
     }
 
     g_process_cache->running = 0;
+
+    // 清理inotify监控
+    cleanup_inotify_monitor();
 
     linx_thread_pool_destroy(g_process_cache->thread_pool, 1);
 
@@ -580,6 +785,71 @@ int linx_process_cache_cleanup(void)
     return cleaned;
 }
 
+int linx_process_cache_create_from_event(pid_t pid, const char *comm, const char *cmdline)
+{
+    linx_process_info_t *info, *old_info;
+    
+    if (!g_process_cache) {
+        return -1;
+    }
+    
+    // 先检查是否已经存在
+    pthread_rwlock_rdlock(&g_process_cache->lock);
+    HASH_FIND_INT(g_process_cache->hash_table, &pid, old_info);
+    pthread_rwlock_unlock(&g_process_cache->lock);
+    
+    if (old_info) {
+        // 已存在，只需要标记为已退出（因为是EXIT事件触发的）
+        pthread_rwlock_wrlock(&g_process_cache->lock);
+        if (old_info->is_alive) {
+            old_info->is_alive = 0;
+            old_info->exit_time = time(NULL);
+            old_info->state = LINX_PROCESS_STATE_EXITED;
+        }
+        pthread_rwlock_unlock(&g_process_cache->lock);
+        return 0;
+    }
+    
+    // 创建新的进程信息项（基于事件数据）
+    info = calloc(1, sizeof(linx_process_info_t));
+    if (!info) {
+        return -1;
+    }
+    
+    // 填充基本信息
+    info->pid = pid;
+    info->create_time = time(NULL);
+    info->update_time = info->create_time;
+    info->exit_time = info->create_time; // 进程已退出
+    info->is_alive = 0; // 标记为已退出
+    info->state = LINX_PROCESS_STATE_EXITED;
+    
+    // 从事件数据中获取进程名和命令行
+    if (comm) {
+        strncpy(info->name, comm, sizeof(info->name) - 1);
+        info->name[sizeof(info->name) - 1] = '\0';
+        strncpy(info->comm, comm, sizeof(info->comm) - 1);
+        info->comm[sizeof(info->comm) - 1] = '\0';
+    }
+    
+    if (cmdline) {
+        strncpy(info->cmdline, cmdline, sizeof(info->cmdline) - 1);
+        info->cmdline[sizeof(info->cmdline) - 1] = '\0';
+    }
+    
+    // 其他字段保持默认值（0）
+    
+    // 添加到缓存
+    pthread_rwlock_wrlock(&g_process_cache->lock);
+    HASH_ADD_INT(g_process_cache->hash_table, pid, info);
+    pthread_rwlock_unlock(&g_process_cache->lock);
+    
+    printf("INFO: Created process cache from event data for short-lived process %d (%s)\n", 
+           pid, comm ? comm : "unknown");
+    
+    return 0;
+}
+
 void linx_process_cache_stats(int *total, int *alive, int *expired)
 {
     int t = 0, a = 0, e = 0;
@@ -624,4 +894,29 @@ void linx_process_cache_stats(int *total, int *alive, int *expired)
     if (expired) {
         *expired = e;
     }
+}
+
+int linx_process_cache_get_monitor_status(char *status_buf, size_t buf_size)
+{
+    if (!status_buf || buf_size == 0) {
+        return -1;
+    }
+    
+    if (!g_process_cache) {
+        snprintf(status_buf, buf_size, "Process cache not initialized");
+        return -1;
+    }
+    
+    const char *monitor_type = (g_process_cache->inotify_fd >= 0) ? 
+                               "inotify-based (real-time)" : 
+                               "polling-based (fallback)";
+    
+    int total = 0, alive = 0, expired = 0;
+    linx_process_cache_stats(&total, &alive, &expired);
+    
+    snprintf(status_buf, buf_size, 
+             "Monitor Type: %s, Total Processes: %d, Alive: %d, Exited: %d", 
+             monitor_type, total, alive, expired);
+    
+    return 0;
 }
