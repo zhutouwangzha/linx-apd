@@ -7,10 +7,45 @@
 #include "linx_rule_engine_lexer.h"
 
 static ast_node_t *parse_embedded_remainder(linx_lexer_t *lexer);
+static ast_node_t *parse_field_remainder(linx_lexer_t *lexer);
+static ast_node_t *parse_field_or_transformer_remainder(linx_lexer_t *lexer);
 
 static ast_node_t *try_parse_transformer_or_val(linx_lexer_t *lexer)
 {
-    (void)lexer;
+    ast_node_t *node = NULL;
+    int op_type;
+
+    linx_lexer_blank(lexer);
+
+    if (linx_lexer_field_transformer_val(lexer)) {
+        linx_lexer_blank(lexer);
+
+        op_type = op_str_to_field_transformer_val(lexer->last_token);
+
+        if (!linx_lexer_field_name(lexer)) {
+            LINX_LOG_ERROR("Expected field name after transformer");
+            return NULL;
+        }
+
+        node = parse_field_remainder(lexer);
+
+        linx_lexer_blank(lexer);
+
+        if (!linx_lexer_find_str(lexer, ")")) {
+            LINX_LOG_ERROR("Expected ')' after field transformer");
+            ast_node_destroy(node);
+            return NULL;
+        }
+
+        return ast_node_create_field_transformer_val(op_type, node);
+    }
+
+    if (linx_lexer_field_transformer_type(lexer)) {
+        linx_lexer_blank(lexer);
+
+        return parse_field_or_transformer_remainder(lexer);
+    }
+
     return NULL;
 }
 
@@ -116,6 +151,15 @@ static ast_node_t *parse_list_value_or_transformer(linx_lexer_t *lexer)
         return list;
     }
 
+    item = try_parse_transformer_or_val(lexer);
+    if (!item) {
+        return item;
+    }
+
+    if (linx_lexer_identifier(lexer)) {
+        // todo
+    }
+
     return NULL;
 }
 
@@ -128,7 +172,8 @@ static ast_node_t *parse_condition(linx_lexer_t *lexer, ast_node_t *left)
 
     /* 处理一元运算符 */
     if (linx_lexer_unary_op(lexer)) {
-
+        op_type = (int)op_str_to_unary_op(lexer->last_token);
+        return ast_node_create_unary(op_type, left);
     }
 
     linx_lexer_blank(lexer);
@@ -155,15 +200,61 @@ static ast_node_t *parse_condition(linx_lexer_t *lexer, ast_node_t *left)
 
 static ast_node_t *parse_field_remainder(linx_lexer_t *lexer)
 {
-    ast_node_t *node = ast_node_create_field_name(lexer->last_token);
+    ast_node_t *node;
+    char *field_name = strdup(lexer->last_token);
 
     if (linx_lexer_find_str(lexer, "[")) {
+        if (!linx_lexer_quoted_str(lexer) &&
+            !linx_lexer_field_arg_bare_str(lexer))
+        {
+            LINX_LOG_ERROR("Invalid field argument");
+            return NULL;
+        }
+
+        field_name = strcat(field_name, ".");
+        field_name = strcat(field_name, lexer->last_token);
+
         if (!linx_lexer_find_str(lexer, "]")) {
             LINX_LOG_ERROR("Missing ']'");
+            return NULL;
         }
     }
 
+    node = ast_node_create_field_name(field_name, NULL);
+    free(field_name);
+
     return node;
+}
+
+static ast_node_t *parse_field_or_transformer_remainder(linx_lexer_t *lexer)
+{
+    ast_node_t *node;
+    int op_type = op_str_to_field_transformer_type(lexer->last_token);
+
+    linx_lexer_blank(lexer);
+
+    if (linx_lexer_field_transformer_type(lexer)) { 
+        linx_lexer_blank(lexer);
+        node = parse_field_or_transformer_remainder(lexer);
+    }
+
+    if (linx_lexer_field_name(lexer)) {
+        node = parse_field_remainder(lexer);
+    }
+
+    if (!node) {
+        LINX_LOG_ERROR("Missing field name or transformer");
+        return NULL;
+    }
+
+    linx_lexer_blank(lexer);
+
+    if (!linx_lexer_find_str(lexer, ")")) {
+        LINX_LOG_ERROR("Missing ')'");
+        return NULL;
+    }
+
+    return ast_node_create_field_transformer(op_type, node);
 }
 
 static ast_node_t *parse_check(linx_lexer_t *lexer)
@@ -184,8 +275,16 @@ static ast_node_t *parse_check(linx_lexer_t *lexer)
     }
 
     // 处理字段转换表达式
+    if (linx_lexer_field_transformer_type(lexer)) {
+        linx_lexer_blank(lexer);
+        left = parse_field_or_transformer_remainder(lexer);
+        return parse_condition(lexer, left);
+    }
 
     // 处理标识符表达式
+    if (linx_lexer_identifier(lexer)) {
+        // todo
+    }
 
     LINX_LOG_ERROR("expected a '(' token, a field check, or an identifier");
 
@@ -232,7 +331,7 @@ static ast_node_t *parse_and(linx_lexer_t *lexer)
             if (linx_lexer_find_str(lexer, "(")) {
                 right = parse_embedded_remainder(lexer);
             } else {
-                LINX_LOG_DEBUG("expected blank or '(' after 'and'");
+                LINX_LOG_ERROR("expected blank or '(' after 'and'");
             }
         } else {
             right = parse_not(lexer);
@@ -260,7 +359,7 @@ static ast_node_t *parse_or(linx_lexer_t *lexer)
             if (linx_lexer_find_str(lexer, "(")) {
                 right = parse_embedded_remainder(lexer);
             } else {
-                LINX_LOG_DEBUG("expected blank or '(' after 'or'");
+                LINX_LOG_ERROR("expected blank or '(' after 'or'");
             }
         } else {
             right = parse_and(lexer);
@@ -280,19 +379,17 @@ static ast_node_t *parse_embedded_remainder(linx_lexer_t *lexer)
     ast_node_t *node;
 
     linx_lexer_blank(lexer);
-
     node = parse_or(lexer);
-
     linx_lexer_blank(lexer);
 
     if (!linx_lexer_find_str(lexer, ")")) {
-        LINX_LOG_DEBUG("expected a ')' token");
+        LINX_LOG_ERROR("expected a ')' token");
     }
 
     return node;
 }
 
-void print_ast(ast_node_t *node)
+static void print_ast(ast_node_t *node)
 {
     if (node == NULL) {
         return;
@@ -334,6 +431,16 @@ void print_ast(ast_node_t *node)
             }
         }
         break;
+    case AST_NODE_TYPE_FIELD_TRANSFORMER:
+        printf(" %s ", g_field_transformer_types[node->data.field_transformer.type.type]);
+        print_ast(node->data.field_transformer.operand);
+        printf(")");
+        break;
+    case AST_NODE_TYPE_FIELD_TRANSFORMER_VAL:
+        printf(" %s ", g_field_transformer_vals[node->data.field_transformer.type.val]);
+        print_ast(node->data.field_transformer.operand);
+        printf(")");
+        break;
     case AST_NODE_TYPE_INT:
         printf("%lld", node->data.number_value.int_value);
         break;
@@ -344,7 +451,7 @@ void print_ast(ast_node_t *node)
         printf("%s", node->data.string_value);
         break;
     case AST_NODE_TYPE_FIELD_NAME:
-        printf("%s", node->data.field_name);
+        printf("%s", node->data.field.name);
         break;
     default:
         break;
@@ -369,8 +476,6 @@ int condition_to_ast(const char *condition, ast_node_t **ast_root)
 
     print_ast(*ast_root);
     printf("\n");
-
-    fflush(stdout);
 
     linx_lexer_destroy(lexer);
 

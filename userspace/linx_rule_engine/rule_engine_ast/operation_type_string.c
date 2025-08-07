@@ -55,6 +55,18 @@ const char *g_binary_bool_ops[BINARY_BOOL_OP_MAX] = {
     "and"
 };
 
+const char *g_field_transformer_types[FIELD_TRANSFORMER_TYPE_MAX] = {
+    "tolower(",
+    "toupper(",
+    "b64(",
+    "basename(",
+    "len("
+};
+
+const char *g_field_transformer_vals[FIELD_TRANSFORMER_VAL_MAX] = {
+    "val("
+};
+
 unary_op_type_t op_str_to_unary_op(const char *str)
 {
     unary_op_type_t op = -1;
@@ -125,6 +137,34 @@ binary_bool_op_type_t op_str_to_binary_bool_op(const char *str)
     return op; 
 }
 
+field_transformer_type_t op_str_to_field_transformer_type(const char *str)
+{
+    field_transformer_type_t op = -1;
+
+    for (int i = 0; i < FIELD_TRANSFORMER_TYPE_MAX; i++) {
+        if (strcmp(str, g_field_transformer_types[i]) == 0) {
+            op = i;
+            break;
+        }
+    }
+
+    return op;
+}
+
+field_transformer_type_t op_str_to_field_transformer_val(const char *str)
+{
+    field_transformer_type_t op = -1;
+
+    for (int i = 0; i < FIELD_TRANSFORMER_VAL_MAX; i++) {
+        if (strcmp(str, g_field_transformer_vals[i]) == 0) {
+            op = i;
+            break;
+        }
+    }
+
+    return op;
+}
+
 int op_str_to_op_type(const char *str)
 {
     int op = -1;
@@ -134,6 +174,8 @@ int op_str_to_op_type(const char *str)
     op = (op != -1) ? op : (int)op_str_to_binary_str_op(str);
     op = (op != -1) ? op : (int)op_str_to_binary_list_op(str);
     op = (op != -1) ? op : (int)op_str_to_binary_bool_op(str);
+    op = (op != -1) ? op : (int)op_str_to_field_transformer_type(str);
+    op = (op != -1) ? op : (int)op_str_to_field_transformer_val(str);
 
     return op;
 }

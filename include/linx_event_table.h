@@ -4,20 +4,19 @@
 #include <stdint.h>
 
 #include "linx_event_type.h"
+#include "linx_field_type.h"
 
 typedef struct {
-    const char *name;
-    uint32_t enter_num;
-    uint32_t exit_num;
+    char name[32];
+    linx_field_type_t type;
+} linx_param_info_t;
+
+typedef struct {
+    char name[32];
+    uint32_t nparams;
+    linx_param_info_t params[32];
 } linx_event_table_t;
 
-__attribute__((weak))
-linx_event_table_t linx_event_table[LINX_EVENT_TYPE_MAX] = {
-    [LINX_EVENT_TYPE_OPEN_E] = {
-        .name = "open",
-        .enter_num = 2,
-        .exit_num = 1
-    },
-};
+extern const linx_event_table_t g_linx_event_table[LINX_EVENT_TYPE_MAX];
 
 #endif /* __LINX_EVENT_TABLE_H__ */

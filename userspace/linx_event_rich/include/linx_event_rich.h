@@ -4,11 +4,14 @@
 #include <stdint.h>
 
 #include "linx_event.h"
+#include "event.h"
 
 int linx_event_rich_init(void);
 
 int linx_event_rich_deinit(void);
 
 int linx_event_rich(linx_event_t *event);
+
+event_t *linx_event_rich_get(void);
 
 #endif /* __LINX_EVENT_RICH_H__ */

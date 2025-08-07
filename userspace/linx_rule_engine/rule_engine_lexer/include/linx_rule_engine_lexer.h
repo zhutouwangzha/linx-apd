@@ -28,6 +28,10 @@ bool linx_lexer_hex_num(linx_lexer_t *lexer);
 
 bool linx_lexer_num(linx_lexer_t *lexer);
 
+bool linx_lexer_identifier(linx_lexer_t *lexer);
+
+bool linx_lexer_field_arg_bare_str(linx_lexer_t *lexer);
+
 bool linx_lexer_unary_op(linx_lexer_t *lexer);
 
 bool linx_lexer_num_op(linx_lexer_t *lexer);
@@ -35,6 +39,10 @@ bool linx_lexer_num_op(linx_lexer_t *lexer);
 bool linx_lexer_str_op(linx_lexer_t *lexer);
 
 bool linx_lexer_list_op(linx_lexer_t *lexer);
+
+bool linx_lexer_field_transformer_type(linx_lexer_t *lexer);
+
+bool linx_lexer_field_transformer_val(linx_lexer_t *lexer);
 
 bool linx_lexer_quoted_str(linx_lexer_t *lexer);
 

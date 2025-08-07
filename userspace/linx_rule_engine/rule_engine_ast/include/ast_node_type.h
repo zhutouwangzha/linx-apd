@@ -13,6 +13,8 @@ typedef enum {
     AST_NODE_TYPE_BIN_STR_OP,   /* 字符串二元操作符号 */
     AST_NODE_TYPE_BIN_LIST_OP,  /* 列表二元操作符号 */
     AST_NODE_TYPE_UN_OP,        /* 一元操作符 */
+    AST_NODE_TYPE_FIELD_TRANSFORMER,   /* 字段转换符号 */
+    AST_NODE_TYPE_FIELD_TRANSFORMER_VAL,
     AST_NODE_TYPE_MAX
 } ast_node_type_t;
 

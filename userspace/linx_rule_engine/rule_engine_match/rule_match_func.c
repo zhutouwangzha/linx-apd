@@ -5,6 +5,19 @@
 #include "rule_match_struct.h"
 #include "rule_match_context.h"
 #include "output_match_func.h"
+#include "linx_field_type.h"
+#include "linx_process_cache.h"
+
+static void *matcher_get_value_ptr(field_result_t *field, linx_field_type_t *type)
+{
+    void *ptr = linx_hash_map_get_value_ptr(field, type);
+
+    if (ptr && field->type == LINX_FIELD_TYPE_STRUCT) {
+        ptr = (void *)(*(uint64_t *)ptr);
+    }
+
+    return ptr;
+}
 
 static char *linx_str_lower(char *str)
 {
@@ -70,8 +83,9 @@ bool not_matcher(void *context)
 
 bool num_gt_matcher(void *context)
 {
+    linx_field_type_t type;
     num_context_t *ctx = (num_context_t *)context;
-    void *value_ptr = linx_hash_map_get_value_ptr(&ctx->field);
+    void *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     if (!value_ptr) {
         return false;
     }
@@ -82,8 +96,9 @@ bool num_gt_matcher(void *context)
 
 bool num_ge_matcher(void *context)
 {
+    linx_field_type_t type;
     num_context_t *ctx = (num_context_t *)context;
-    void *value_ptr = linx_hash_map_get_value_ptr(&ctx->field);
+    void *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     if (!value_ptr) {
         return false;
     }
@@ -94,8 +109,9 @@ bool num_ge_matcher(void *context)
 
 bool num_lt_matcher(void *context)
 {
+    linx_field_type_t type;
     num_context_t *ctx = (num_context_t *)context;
-    void *value_ptr = linx_hash_map_get_value_ptr(&ctx->field);
+    void *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     if (!value_ptr) {
         return false;
     }
@@ -106,8 +122,9 @@ bool num_lt_matcher(void *context)
 
 bool num_le_matcher(void *context)
 {
+    linx_field_type_t type;
     num_context_t *ctx = (num_context_t *)context;
-    void *value_ptr = linx_hash_map_get_value_ptr(&ctx->field);
+    void *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     if (!value_ptr) {
         return false;
     }
@@ -119,16 +136,19 @@ bool num_le_matcher(void *context)
 bool str_assign_matcher(void *context)
 {
     int ret;
+    linx_field_type_t type;
     str_context_t *ctx = (str_context_t *)context;
-    char *value_ptr = linx_hash_map_get_value_ptr(&ctx->field);
+    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     char *value;
     char buffer[256] = {0};
 
-    switch (ctx->field.type) {
-    case FIELD_TYPE_CHARBUF:
+    switch (type) {
+    case LINX_FIELD_TYPE_CHARBUF:
+    case LINX_FIELD_TYPE_UID:
+    case LINX_FIELD_TYPE_PID:
         value = value_ptr;
         break;
-    case FILED_TYPE_CHARBUF_ARRAY:
+    case LINX_FIELD_TYPE_CHARBUF_ARRAY:
         value = (char *)(*(uint64_t *)value_ptr);
         break;
     default:
@@ -157,16 +177,17 @@ bool str_ne_matcher(void *context)
 
 bool str_contains_matcher(void *context)
 {
+    linx_field_type_t type;
     str_context_t *ctx = (str_context_t *)context;
-    char *value_ptr = linx_hash_map_get_value_ptr(&ctx->field);
+    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     char *value;
     const char *result;
 
-    switch (ctx->field.type) {
-    case FIELD_TYPE_CHARBUF:
+    switch (type) {
+    case LINX_FIELD_TYPE_CHARBUF:
         value = value_ptr;
         break;
-    case FILED_TYPE_CHARBUF_ARRAY:
+    case LINX_FIELD_TYPE_CHARBUF_ARRAY:
         value = (char *)(*(uint64_t *)value_ptr);
         break;
     default:
@@ -181,16 +202,17 @@ bool str_contains_matcher(void *context)
 
 bool str_icontains_matcher(void *context)
 {
+    linx_field_type_t type;
     str_context_t *ctx = (str_context_t *)context;
-    char *value_ptr = linx_hash_map_get_value_ptr(&ctx->field);
+    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     char *value, *lower1, *lower2;
     const char *result;
 
-    switch (ctx->field.type) {
-    case FIELD_TYPE_CHARBUF:
+    switch (type) {
+    case LINX_FIELD_TYPE_CHARBUF:
         value = value_ptr;
         break;
-    case FILED_TYPE_CHARBUF_ARRAY:
+    case LINX_FIELD_TYPE_CHARBUF_ARRAY:
         value = (char *)(*(uint64_t *)value_ptr);
         break;
     default:
@@ -215,15 +237,16 @@ bool str_icontains_matcher(void *context)
 
 bool str_startswith_matcher(void *context)
 {
+    linx_field_type_t type;
     str_context_t *ctx = (str_context_t *)context;
-    char *value_ptr = linx_hash_map_get_value_ptr(&ctx->field);
+    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     char *value;
 
-    switch (ctx->field.type) {
-    case FIELD_TYPE_CHARBUF:
+    switch (type) {
+    case LINX_FIELD_TYPE_CHARBUF:
         value = value_ptr;
         break;
-    case FILED_TYPE_CHARBUF_ARRAY:
+    case LINX_FIELD_TYPE_CHARBUF_ARRAY:
         value = (char *)(*(uint64_t *)value_ptr);
         break;
     default:
@@ -240,16 +263,17 @@ bool str_startswith_matcher(void *context)
 
 bool str_endswith_matcher(void *context)
 {
+    linx_field_type_t type;
     str_context_t *ctx = (str_context_t *)context;
-    char *value_ptr = linx_hash_map_get_value_ptr(&ctx->field);
+    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     char *value;
     size_t value_len;
 
-    switch (ctx->field.type) {
-    case FIELD_TYPE_CHARBUF:
+    switch (type) {
+    case LINX_FIELD_TYPE_CHARBUF:
         value = value_ptr;
         break;
-    case FILED_TYPE_CHARBUF_ARRAY:
+    case LINX_FIELD_TYPE_CHARBUF_ARRAY:
         value = (char *)(*(uint64_t *)value_ptr);
         break;
     default:
@@ -271,17 +295,18 @@ bool str_endswith_matcher(void *context)
 bool list_in_matcher(void *context)
 {
     int ret;
+    linx_field_type_t type;
     list_context_t *ctx = (list_context_t *)context;
-    char *value_ptr = linx_hash_map_get_value_ptr(&ctx->field);
+    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     char *value;
     size_t value_len;
     char buffer[256] = {0};
 
-    switch (ctx->field.type) {
-    case FIELD_TYPE_CHARBUF:
+    switch (type) {
+    case LINX_FIELD_TYPE_CHARBUF:
         value = value_ptr;
         break;
-    case FILED_TYPE_CHARBUF_ARRAY:
+    case LINX_FIELD_TYPE_CHARBUF_ARRAY:
         value = (char *)(*(uint64_t *)value_ptr);
         break;
     default:

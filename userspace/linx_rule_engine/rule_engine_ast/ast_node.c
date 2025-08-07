@@ -6,7 +6,12 @@
 ast_node_t *ast_node_create(ast_node_type_t type)
 {
     ast_node_t *node = malloc(sizeof(ast_node_t)); 
-    
+    if (!node) {
+        return NULL;
+    }
+
+    memset(node, 0 , sizeof(ast_node_t));
+
     node->type = type;
 
     return node;
@@ -24,8 +29,8 @@ void ast_node_destroy(ast_node_t *node)
         node->data.string_value = NULL;
         break;
     case AST_NODE_TYPE_FIELD_NAME:
-        free(node->data.field_name);
-        node->data.field_name = NULL;
+        free(node->data.field.name);
+        node->data.field.name = NULL;
         break;
     case AST_NODE_TYPE_BIN_NUM_OP:
     case AST_NODE_TYPE_BIN_STR_OP:
@@ -42,6 +47,9 @@ void ast_node_destroy(ast_node_t *node)
 
         free(node->data.list.items);
         node->data.list.items = NULL;
+        break;
+    case AST_NODE_TYPE_FIELD_TRANSFORMER:
+        ast_node_destroy(node->data.field_transformer.operand);
         break;
     default:
         break;
@@ -79,11 +87,12 @@ ast_node_t *ast_node_create_string(char *str)
     return node;
 }
 
-ast_node_t *ast_node_create_field_name(char *name)
+ast_node_t *ast_node_create_field_name(char *name, char *arg)
 {
+    (void)arg;
     ast_node_t *node = ast_node_create(AST_NODE_TYPE_FIELD_NAME);
 
-    node->data.field_name = strdup(name);
+    node->data.field.name = strdup(name);
 
     return node;
 }
@@ -160,6 +169,26 @@ ast_node_t *ast_node_create_unary(unary_op_type_t op, ast_node_t *operand)
 
     node->data.unary.unary_op = op;
     node->data.unary.operand = operand;
+
+    return node;
+}
+
+ast_node_t *ast_node_create_field_transformer(field_transformer_type_t op, ast_node_t *operand)
+{
+    ast_node_t *node = ast_node_create(AST_NODE_TYPE_FIELD_TRANSFORMER);
+
+    node->data.field_transformer.type.type = op;
+    node->data.field_transformer.operand = operand;
+
+    return node;
+}
+
+ast_node_t *ast_node_create_field_transformer_val(field_transformer_val_t op, ast_node_t *operand)
+{
+    ast_node_t *node = ast_node_create(AST_NODE_TYPE_FIELD_TRANSFORMER_VAL);
+
+    node->data.field_transformer.type.val = op;
+    node->data.field_transformer.operand = operand;
 
     return node;
 }

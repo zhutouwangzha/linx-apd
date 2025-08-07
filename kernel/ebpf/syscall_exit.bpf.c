@@ -24,7 +24,6 @@ int BPF_PROG(sys_exit, struct pt_regs *regs, long ret)
         return 0;
     }
 
-    bpf_printk("4\n");
     bpf_tail_call(ctx, &syscall_exit_tail_table, syscall_id);
 
     return 0;

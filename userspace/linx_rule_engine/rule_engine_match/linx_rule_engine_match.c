@@ -35,7 +35,7 @@ static int find_field_name_and_value(ast_node_t *root, char **name, void **ctx)
         return -1;
     }
 
-    *name = left->data.field_name;
+    *name = left->data.field.name;
 
     switch (right->type) {
     case AST_NODE_TYPE_INT:

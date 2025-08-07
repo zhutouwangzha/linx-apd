@@ -1,6 +1,8 @@
 #include <stddef.h>
 
 #include "linx_hash_map.h"
+#include "linx_event_rich.h"
+#include "linx_event_table.h"
 
 static linx_hash_map_t *s_linx_hash_map = NULL;
 
@@ -108,7 +110,7 @@ int linx_hash_map_remove_table(const char *table_name)
     return 0;
 }
 
-int linx_hash_map_add_field(const char *table_name, const char *field_name, size_t offset, size_t size, field_type_t type)
+int linx_hash_map_add_field(const char *table_name, const char *field_name, size_t offset, size_t size, linx_field_type_t type)
 {
     field_table_t *table;
     field_info_t *existing_field, *new_field;
@@ -199,7 +201,7 @@ field_result_t linx_hash_map_get_field(const char *table_name, const char *field
 
 field_result_t linx_hash_map_get_field_by_path(char *path)
 {
-    char *table_name, *field_name;
+    char *table_name, *field_name, *arg;
     field_result_t result = {0};
     result.found = false;
 
@@ -217,12 +219,23 @@ field_result_t linx_hash_map_get_field_by_path(char *path)
         return result;
     }
 
-    return linx_hash_map_get_field(table_name, field_name);
+    result = linx_hash_map_get_field(table_name, field_name);
+
+    arg = strtok(NULL, ".");
+    if (arg == NULL) {
+        result.arg = NULL;
+    } else {
+        result.arg = strdup(arg);
+    }
+
+    result.event_type = &(linx_event_rich_get()->num);
+
+    return result;
 }
 
-void *linx_hash_map_get_value_ptr(const field_result_t *field)
+void *linx_hash_map_get_value_ptr(const field_result_t *field, linx_field_type_t *type)
 {
-    void *base_addr;
+    void *base_addr, *ptr;
 
     if (!field->found) {
         return NULL;
@@ -233,7 +246,31 @@ void *linx_hash_map_get_value_ptr(const field_result_t *field)
         return NULL;
     }
 
-    return (void *)((char *)base_addr + field->offset);
+    if (field->arg) {
+        char *endptr;
+        long index = strtol(field->arg, &endptr, 10);
+
+        /* 如果不是纯数字，则通过名称查找下标 */
+        if (*endptr != '\0') {
+            for (index = 0; index < g_linx_event_table[*field->event_type].nparams; index++) {
+                if (strcmp(g_linx_event_table[*field->event_type].params[index].name, field->arg) == 0) {
+                    break;
+                }
+            }
+        }
+
+        if (index >= g_linx_event_table[*field->event_type].nparams) {
+            return NULL;
+        }
+
+        ptr = (void *)((char *)base_addr + field->offset + index * sizeof(void *));
+        *type = g_linx_event_table[*field->event_type].params[index].type;
+    } else {
+        ptr = (void *)((char *)base_addr + field->offset);
+        *type = field->type;
+    }
+
+    return ptr;
 }
 
 int linx_hash_map_update_table_base(const char *table_name, void *base_addr)

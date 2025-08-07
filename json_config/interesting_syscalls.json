@@ -1,7 +1,7 @@
 {
     "read": {
       "syscall_id": 0,
-      "interesting": 0
+      "interesting": 1
     },
     "write": {
       "syscall_id": 1,

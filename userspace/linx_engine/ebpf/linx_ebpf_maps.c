@@ -3,8 +3,13 @@
 #include "linx_log.h"
 #include "linx_ebpf_common.h"
 #include "linx_ebpf_api.h"
-#include "linx_syscall_table.h"
+#include "linx_event_table.h"
 #include "linx_config.h"
+#include "linx_exit_extra_id.h"
+
+static const char *syscall_exit_extra_names[LINX_EXIT_EXTRA_ID_MAX] = {
+    [T1_EXECV_X] = "t1_execve_x",
+};
 
 int linx_ebpf_maps_before_load(linx_ebpf_t *bpf_manager)
 {
@@ -77,7 +82,7 @@ void linx_ebpf_set_interesting_syscalls_table(struct linx_bpf *skel)
 {
     linx_global_config_t *config = linx_config_get();
 
-    for (int i = 0; i < LINX_SYSCALL_MAX_IDX; ++i) {
+    for (int i = 0; i < LINX_SYSCALL_ID_MAX; ++i) {
         skel->bss->g_interesting_syscalls_table[i] =
             config->engine.data.ebpf.interest_syscall_table[i];
     }
@@ -116,35 +121,35 @@ int linx_ebpf_load_tail_call_map(struct linx_bpf *skel)
 {
     int enter_table_fd = bpf_map__fd(skel->maps.syscall_enter_tail_table);
     int exit_table_fd = bpf_map__fd(skel->maps.syscall_exit_tail_table);
-    const char *enter_name, *exit_name;
+    char prog_name[64];
     linx_global_config_t *config = linx_config_get();
 
-    for (int syscall_id = 0; syscall_id < LINX_SYSCALL_MAX_IDX; ++syscall_id) {
+    for (int syscall_id = 0; syscall_id < LINX_SYSCALL_ID_MAX; ++syscall_id) {
         if (!config->engine.data.ebpf.interest_syscall_table[syscall_id]) {
             LINX_LOG_DEBUG("The %s(%d) syscall is ont interest!",
-                           g_linx_syscall_table[syscall_id].name, syscall_id);
+                           g_linx_event_table[syscall_id * 2].name, syscall_id);
             continue;
         }
 
-        enter_name = g_linx_syscall_table[syscall_id].ebpf_prog_name[LINX_SYSCALL_TYPE_ENTER];
-        exit_name = g_linx_syscall_table[syscall_id].ebpf_prog_name[LINX_SYSCALL_TYPE_EXIT];
+        snprintf(prog_name, sizeof(prog_name), "%s_e", 
+                g_linx_event_table[syscall_id * 2].name);
 
-        if (enter_name != NULL) {
-            if (linx_ebpf_add_prog_to_tail_table(skel, enter_table_fd, enter_name, syscall_id)) {
-                LINX_LOG_ERROR("Failed to add '%s' prog to syscall_enter_tail_table!", 
-                               enter_name);
-                goto clean_load_tail_call_map;
-            }
+        if (linx_ebpf_add_prog_to_tail_table(skel, enter_table_fd, prog_name, syscall_id)) {
+            LINX_LOG_ERROR("Failed to add '%s' prog to syscall_enter_tail_table!", 
+                           prog_name);
+            goto clean_load_tail_call_map;
         }
 
-        if (exit_name != NULL) {
-            if (linx_ebpf_add_prog_to_tail_table(skel, exit_table_fd, exit_name, syscall_id)) {
-                LINX_LOG_ERROR("Failed to add '%s' prog to syscall_exit_tail_table!", 
-                               exit_name);
-                goto clean_load_tail_call_map;
-            }
+        snprintf(prog_name, sizeof(prog_name), "%s_x", 
+                g_linx_event_table[syscall_id * 2].name);
+
+        if (linx_ebpf_add_prog_to_tail_table(skel, exit_table_fd, prog_name, syscall_id)) {
+            LINX_LOG_ERROR("Failed to add '%s' prog to syscall_exit_tail_table!", 
+                           prog_name);
+            goto clean_load_tail_call_map;
         }
     }
+
     return 0;
 
 clean_load_tail_call_map:

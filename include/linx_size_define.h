@@ -4,7 +4,7 @@
 /**
  * 系统调用参数的最大个数
  */
-#define SYSCALL_PARAMS_MAX_COUNT    (6)
+#define SYSCALL_PARAMS_MAX_COUNT    (32)
 
 /**
  * 事件头的大小
@@ -55,5 +55,13 @@
  * 可过滤COMM的最大数量
  */
 #define LINX_BPF_FILTER_COMM_MAX_SIZE   (16)
+
+/**
+ * 网络相关的长度定义
+*/
+#define LINX_FAMILY_SIZE                sizeof(uint8_t)
+#define LINX_IPV4_SIZE                  sizeof(uint32_t)
+#define LINX_IPV6_SIZE                  16
+#define LINX_PORT_SIZE                  sizeof(uint16_t)
 
 #endif /* __LINX_SIZE_DEFINE_H__ */

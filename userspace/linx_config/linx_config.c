@@ -10,7 +10,7 @@
 #include "linx_log.h"
 #include "linx_config.h"
 #include "linx_yaml.h"
-#include "linx_syscall_table.h"
+#include "linx_event_table.h"
 
 linx_global_config_t *linx_global_config = NULL;
 
@@ -58,8 +58,8 @@ static int linx_config_fill_interest_syscall_table(char *file_path)
 
     free(jsonstr);
 
-    for (int i = 0; i < LINX_SYSCALL_MAX_IDX; i++) {
-        member = cJSON_GetObjectItem(json_config, g_linx_syscall_table[i].name);
+    for (int i = 0; i < LINX_SYSCALL_ID_MAX; i++) {
+        member = cJSON_GetObjectItem(json_config, g_linx_event_table[i * 2].name);
         if (!member) {
             continue;
         }

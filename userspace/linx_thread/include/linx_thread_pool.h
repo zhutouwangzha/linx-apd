@@ -16,6 +16,7 @@ typedef struct {
     linx_thread_info_t *threads;
     linx_task_t *task_queue_head;
     linx_task_t *task_queue_tail;
+    linx_task_t *task_runing;       /* 正在运行还未退出的程序 */
     int thread_count;
     int active_threads;
     int queue_size;

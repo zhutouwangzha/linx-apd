@@ -83,15 +83,26 @@ static void *linx_thread_worker(void *arg)
         if (pool->task_queue_head == NULL) {
             pool->task_queue_tail = NULL;
         }
-        
+
         pool->queue_size--;
+
+        /* 记录当前正在处理的任务 */
+        pool->task_runing = task;
 
         pthread_mutex_unlock(&pool->lock);
 
         /* 执行任务并释放任务结构体 */
         (*(task->func))(task->arg, &task->should_stop);
 
+        /* 任务处理完毕，释放任务结构体 */
+        pthread_mutex_lock(&pool->lock);
+
+        pool->task_runing = NULL;
+
         free(task);
+        task = NULL;
+
+        pthread_mutex_unlock(&pool->lock);
     }
     
     /* 设置线程状态为已终止 */
@@ -283,6 +294,11 @@ int linx_thread_pool_destroy(linx_thread_pool_t *pool, int graceful)
     while (task != NULL) {
         task->should_stop = pool->shutdown;
         task = task->next;
+    }
+
+    task = pool->task_runing;
+    if (task != NULL) {
+        task->should_stop = pool->shutdown;
     }
 
     /* 广播通知所有线程 */

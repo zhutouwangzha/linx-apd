@@ -18,6 +18,8 @@
 #include "linx_event_queue.h"
 #include "linx_event.h"
 #include "linx_process_cache.h"
+#include "linx_machine_status.h"
+
 static int linx_event_loop(void)
 {
     int ret = 0;
@@ -133,6 +135,16 @@ int main(int argc, char *argv[])
         LINX_LOG_ERROR("linx_process_cache_init failed\n");
     } else {
         *type = LINX_RESOURCE_CLEANUP_PROCESS_CACHE;
+   }
+
+    /**
+     * 机器状态初始化
+    */
+   ret = linx_machine_status_init();
+   if (ret) {
+        LINX_LOG_ERROR("linx_machine_status_init failed\n");
+    } else {
+        *type = LINX_RESOURCE_CLEANUP_MACHINE_STATUS;
    }
 
     ret = linx_event_queue_init(2);

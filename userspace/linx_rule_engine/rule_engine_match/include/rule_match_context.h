@@ -3,6 +3,8 @@
 
 #include "linx_hash_map.h"
 
+typedef char *(*transformer_func_t)(char *);
+
 typedef enum {
     MATCH_CONTEXT_STR,
     MATCH_CONTEXT_NUM,
@@ -16,6 +18,8 @@ typedef struct {
     field_result_t field;
     char *str;
     size_t str_len;
+    transformer_func_t *func;
+    size_t func_num;
 } str_context_t;
 
 typedef struct {

@@ -1,0 +1,53 @@
+#include "get_pt_regs.h"
+#include "ringbuf_func.h"
+
+SEC("tp_btf/sys_enter")
+int BPF_PROG(mount_e, struct pt_regs *regs, long id)
+{
+    linx_ringbuf_t *ringbuf = linx_ringbuf_get();
+    if (!ringbuf) {
+        return 0;
+    }
+
+    linx_ringbuf_load_event(ringbuf, LINX_EVENT_TYPE_MOUNT_E, -1);
+
+    linx_ringbuf_submit_event(ringbuf);
+
+    return 0;
+}
+
+SEC("tp_btf/sys_exit")
+int BPF_PROG(mount_x, struct pt_regs *regs, long ret)
+{
+    linx_ringbuf_t *ringbuf = linx_ringbuf_get();
+    if (!ringbuf) {
+        return 0;
+    }
+
+    linx_ringbuf_load_event(ringbuf, LINX_EVENT_TYPE_MOUNT_X, ret);
+
+    /* char * dev_name */
+    uint64_t __dev_name = (uint64_t)get_pt_regs_argumnet(regs, 0);
+    linx_ringbuf_store_charpointer(ringbuf, __dev_name, LINX_CHARBUF_MAX_SIZE, USER);
+
+    /* char * dir_name */
+    uint64_t __dir_name = (uint64_t)get_pt_regs_argumnet(regs, 1);
+    linx_ringbuf_store_charpointer(ringbuf, __dir_name, LINX_CHARBUF_MAX_SIZE, USER);
+
+    /* char * type */
+    uint64_t __type = (uint64_t)get_pt_regs_argumnet(regs, 2);
+    linx_ringbuf_store_charpointer(ringbuf, __type, LINX_CHARBUF_MAX_SIZE, USER);
+
+    /* unsigned long flags */
+    uint64_t __flags = (uint64_t)get_pt_regs_argumnet(regs, 3);
+    linx_ringbuf_store_u64(ringbuf, __flags);
+
+    /* void * data */
+    uint64_t __data = (uint64_t)get_pt_regs_argumnet(regs, 4);
+    linx_ringbuf_store_u64(ringbuf, __data);
+
+
+    linx_ringbuf_submit_event(ringbuf);
+
+    return 0;
+}

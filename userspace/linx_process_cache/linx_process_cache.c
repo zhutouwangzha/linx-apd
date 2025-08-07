@@ -19,17 +19,17 @@ static linx_process_cache_t *g_process_cache = NULL;
 static int linx_process_cache_bind_field(void)
 {
     BEGIN_FIELD_MAPPINGS(proc)
-        FIELD_MAP(linx_process_info_t, pid, FIELD_TYPE_INT32)
-        FIELD_MAP(linx_process_info_t, ppid, FIELD_TYPE_INT32)
-        FIELD_MAP(linx_process_info_t, pgid, FIELD_TYPE_INT32)
-        FIELD_MAP(linx_process_info_t, sid, FIELD_TYPE_INT32)
-        FIELD_MAP(linx_process_info_t, uid, FIELD_TYPE_INT32)
-        FIELD_MAP(linx_process_info_t, gid, FIELD_TYPE_INT32)
-        FIELD_MAP(linx_process_info_t, name, FIELD_TYPE_CHARBUF)
-        FIELD_MAP(linx_process_info_t, comm, FIELD_TYPE_CHARBUF)
-        FIELD_MAP(linx_process_info_t, cmdline, FIELD_TYPE_CHARBUF)
-        FIELD_MAP(linx_process_info_t, exe, FIELD_TYPE_CHARBUF)
-        FIELD_MAP(linx_process_info_t, cwd, FIELD_TYPE_CHARBUF)
+        FIELD_MAP(linx_process_info_t, pid, LINX_FIELD_TYPE_INT32)
+        FIELD_MAP(linx_process_info_t, ppid, LINX_FIELD_TYPE_INT32)
+        FIELD_MAP(linx_process_info_t, pgid, LINX_FIELD_TYPE_INT32)
+        FIELD_MAP(linx_process_info_t, sid, LINX_FIELD_TYPE_INT32)
+        FIELD_MAP(linx_process_info_t, uid, LINX_FIELD_TYPE_INT32)
+        FIELD_MAP(linx_process_info_t, gid, LINX_FIELD_TYPE_INT32)
+        FIELD_MAP(linx_process_info_t, name, LINX_FIELD_TYPE_CHARBUF)
+        FIELD_MAP(linx_process_info_t, comm, LINX_FIELD_TYPE_CHARBUF)
+        FIELD_MAP(linx_process_info_t, cmdline, LINX_FIELD_TYPE_CHARBUF)
+        FIELD_MAP(linx_process_info_t, exe, LINX_FIELD_TYPE_CHARBUF)
+        FIELD_MAP(linx_process_info_t, cwd, LINX_FIELD_TYPE_CHARBUF)
     END_FIELD_MAPPINGS(proc)
 
     return linx_hash_map_add_field_batch("proc", proc_mappings, proc_mappings_count);
@@ -218,7 +218,8 @@ static linx_process_info_t *create_process_info(pid_t pid)
     info->pid = pid;
     info->create_time = time(NULL);
     info->update_time = info->create_time;
-    info->is_alive = 1;
+    info->is_alive = true;
+    info->is_rich = false;
     
     /* 读取进程信息 */
     if (read_proc_stat(pid, info) < 0 ||
@@ -266,7 +267,7 @@ static void *update_process_task(void *arg, int *should_stop)
 
         if (!old_info->is_alive && old_info->exit_time > 0) {
             info->exit_time = old_info->exit_time;
-            info->is_alive = 0;
+            info->is_alive = false;
         }
 
         HASH_DEL(g_process_cache->hash_table, old_info);
@@ -291,8 +292,7 @@ static void *monitor_thread_func(void *arg, int *should_stop)
     while (g_process_cache->running && !*should_stop) {
         proc_dir = opendir("/proc");
         if (proc_dir == NULL) {
-            // sleep(LINX_PROCESS_CACHE_UPDATE_INTERVAL);
-            usleep(1000 * 100);
+            sleep(LINX_PROCESS_CACHE_UPDATE_INTERVAL);
             continue;
         }
 
@@ -318,8 +318,8 @@ static void *monitor_thread_func(void *arg, int *should_stop)
         pthread_rwlock_wrlock(&g_process_cache->lock);
 
         HASH_ITER(hh, g_process_cache->hash_table, info, tmp) {
-            if (info->is_alive && !is_process_alive(info->pid)) {
-                info->is_alive = 0;
+            if (!info->is_rich && info->is_alive && !is_process_alive(info->pid)) {
+                info->is_alive = false;
                 info->exit_time = time(NULL);
                 info->state = LINX_PROCESS_STATE_EXITED;
             }
@@ -327,8 +327,7 @@ static void *monitor_thread_func(void *arg, int *should_stop)
 
         pthread_rwlock_unlock(&g_process_cache->lock);
 
-        // sleep(LINX_PROCESS_CACHE_UPDATE_INTERVAL);
-        usleep(1000 * 100);
+        sleep(LINX_PROCESS_CACHE_UPDATE_INTERVAL);
     }
 
     return NULL;
@@ -349,8 +348,10 @@ static void *cleaner_thread_func(void *arg, int *should_stop)
 
         HASH_ITER(hh, g_process_cache->hash_table, info, tmp) {
             /* 清理已退出且超过保留时间的进程 */
-            if (!info->is_alive && info->exit_time > 0 &&
-                (now - info->exit_time) > LINX_PROCESS_CACHE_EXPIRE_TIME) {
+            if ((info->is_rich && 
+                 (now - info->start_time) > LINX_PROCESS_CACHE_EXPIRE_TIME) ||
+                (!info->is_alive && info->exit_time > 0 &&
+                (now - info->exit_time) > LINX_PROCESS_CACHE_EXPIRE_TIME)) {
                 HASH_DEL(g_process_cache->hash_table, info);
                 free_process_info(info);
             }
@@ -526,6 +527,39 @@ int linx_process_cache_update_sync(pid_t pid)
 
     *pid_arg = pid;
     update_process_task((void *)pid_arg, &tmp);
+
+    return 0;
+}
+
+int linx_process_cache_update(linx_process_info_t *info)
+{
+    linx_process_info_t *old_info;
+    pid_t pid;
+
+    if (!info) {
+        return -1;
+    }
+
+    pid = info->pid;
+
+    pthread_rwlock_wrlock(&g_process_cache->lock);
+
+    HASH_FIND_INT(g_process_cache->hash_table, &pid, old_info);
+    if (old_info) {
+        info->create_time = old_info->create_time;
+
+        if (!old_info->is_alive && old_info->exit_time > 0) {
+            info->exit_time = old_info->exit_time;
+            info->is_alive = false;
+        }
+
+        HASH_DEL(g_process_cache->hash_table, old_info);
+        free_process_info(old_info);
+    }
+
+    HASH_ADD_INT(g_process_cache->hash_table, pid, info);
+
+    pthread_rwlock_unlock(&g_process_cache->lock);
 
     return 0;
 }

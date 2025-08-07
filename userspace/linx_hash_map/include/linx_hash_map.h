@@ -5,6 +5,7 @@
 #include <stdbool.h>
 
 #include "field_table.h"
+#include "linx_field_type.h"
 
 /**
  * 汇总
@@ -20,11 +21,13 @@ typedef struct {
 */
 typedef struct {
     size_t offset;
-    field_type_t type;
+    linx_field_type_t type;
     size_t size;
     bool found;
     char *table_name;
     char *field_name;
+    char *arg;
+    uint64_t *event_type;       /* 默认指向一个全局的事件类型地址，标识每次事件的类型 */
 } field_result_t;
 
 /**
@@ -33,7 +36,7 @@ typedef struct {
 typedef struct {
     const char *field_name;
     size_t offset;
-    field_type_t type;
+    linx_field_type_t type;
     size_t size;
 } field_mapping_t;
 
@@ -91,7 +94,7 @@ int linx_hash_map_create_table(const char *table_name, void *base_addr);
 
 int linx_hash_map_remove_table(const char *table_name);
 
-int linx_hash_map_add_field(const char *table_name, const char *field_name, size_t offset, size_t size, field_type_t type);
+int linx_hash_map_add_field(const char *table_name, const char *field_name, size_t offset, size_t size, linx_field_type_t type);
 
 int linx_hash_map_add_field_batch(const char *table_name, const field_mapping_t *mappings, size_t count);
 
@@ -99,7 +102,7 @@ field_result_t linx_hash_map_get_field(const char *table_name, const char *field
 
 field_result_t linx_hash_map_get_field_by_path(char *path);
 
-void *linx_hash_map_get_value_ptr(const field_result_t *field);
+void *linx_hash_map_get_value_ptr(const field_result_t *field, linx_field_type_t *type);
 
 int linx_hash_map_update_table_base(const char *table_name, void *base_addr);
 

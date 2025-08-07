@@ -1,7 +1,7 @@
 #include "linx_log.h"
 #include "linx_ebpf_api.h"
 #include "linx_ebpf_common.h"
-#include "linx_syscall_table.h"
+#include "linx_event_table.h"
 #include "linx_config.h"
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
@@ -32,30 +32,37 @@ int linx_ebpf_load(linx_ebpf_t *bpf_manager)
 {
     linx_global_config_t *config = linx_config_get();
 
-    for (int i = 0; i < LINX_SYSCALL_MAX_IDX; ++i) {
+    for (int i = 0; i < LINX_SYSCALL_ID_MAX; ++i) {
         if (config->engine.data.ebpf.interest_syscall_table[i]) {
             LINX_LOG_DEBUG("The %s(%d) syscall is ont interest!",
-                           g_linx_syscall_table[i].name, i);
+                           g_linx_event_table[i * 2].name, i);
             continue;
         }
 
         for (int j = 0; j < 2; ++j) {
-            if (!g_linx_syscall_table[i].ebpf_prog_name[j]) {
-                LINX_LOG_DEBUG("The BPF function for to %s the %s syscall is undefined!",
-                               j ? "enter" : "exit", g_linx_syscall_table[i].name);
-                continue;
+            char bpf_program_name[64];
+            if (j) {
+                snprintf(bpf_program_name, sizeof(bpf_program_name), 
+                         "%s_x", g_linx_event_table[i * 2].name);
+            } else {
+                snprintf(bpf_program_name, sizeof(bpf_program_name), 
+                         "%s_e", g_linx_event_table[i * 2].name);
             }
 
             struct bpf_program *p =
             bpf_object__find_program_by_name(bpf_manager->skel->obj, 
-                                             g_linx_syscall_table[i].ebpf_prog_name[j]);
+                                             bpf_program_name);
             if (!p) {
                 LINX_LOG_DEBUG("The BPF function for to %s the %s syscall does not exist in skel!",
-                               j ? "enter" : "exit", g_linx_syscall_table[i].name);
+                               j ? "enter" : "exit", bpf_program_name);
                 continue;
             }
 
-            bpf_program__set_autoload(p, false);
+            if (bpf_program__set_autoload(p, false) == 0) {
+                LINX_LOG_DEBUG("Disable BPF program '%s' success", bpf_program_name);
+            } else {
+                LINX_LOG_DEBUG("Disable BPF program '%s' failed", bpf_program_name);
+            }
         }
     }
 

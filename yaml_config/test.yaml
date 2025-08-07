@@ -1,8 +1,7 @@
 - rule: Passwd File Access by File Open
   desc: Detect direct file open of sensitive files by known read tools
   condition: >
-    evt.num > 262 and
-    evt.num < 264
+    evt.type in (execv)
   output: >
     res = %evt.res dir = %evt.dir num = %evt.num time = %evt.time type = %evt.type
   priority: WARNING

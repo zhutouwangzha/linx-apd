@@ -145,6 +145,30 @@ bool linx_lexer_num(linx_lexer_t *lexer)
     return true;
 }
 
+bool linx_lexer_identifier(linx_lexer_t *lexer)
+{
+    int ret = linx_regex_match(RGX_IDENTIFIER, current_char(lexer), &lexer->last_token);
+    if (ret <= 0) {
+        return false;
+    }
+
+    update_pos_str(lexer->last_token, ret, lexer);
+
+    return true;
+}
+
+bool linx_lexer_field_arg_bare_str(linx_lexer_t *lexer)
+{
+    int ret = linx_regex_match(RGX_FIELDARGBARESTR, current_char(lexer), &lexer->last_token);
+    if (ret <= 0) {
+        return false;
+    }
+
+    update_pos_str(lexer->last_token, ret, lexer);
+
+    return true;
+}
+
 static bool linx_lexer_find_operator_list(linx_lexer_t *lexer, const char *list[], int len)
 {
     for (int i = 0; i < len; i++) {
@@ -177,6 +201,16 @@ bool linx_lexer_list_op(linx_lexer_t *lexer)
     return linx_lexer_find_operator_list(lexer, g_binary_list_ops, BINARY_LIST_OP_MAX);
 }
 
+bool linx_lexer_field_transformer_type(linx_lexer_t *lexer)
+{
+    return linx_lexer_find_operator_list(lexer, g_field_transformer_types, FIELD_TRANSFORMER_TYPE_MAX);
+}
+
+bool linx_lexer_field_transformer_val(linx_lexer_t *lexer)
+{
+    return linx_lexer_find_operator_list(lexer, g_field_transformer_vals, FIELD_TRANSFORMER_VAL_MAX);
+}
+
 static char *unescape_str(char *str)
 {
     int len = strlen(str);
@@ -190,7 +224,7 @@ static char *unescape_str(char *str)
 
     p = dest;
 
-    for (int i = 0; i < len; i++) {
+    for (int i = i; i < len; i++) {
         if (str[i] == '\\') {
             i += 1;
 

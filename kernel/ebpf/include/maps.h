@@ -4,6 +4,7 @@
 #include "bpf_common.h"
 #include "struct_define.h"
 #include "linx_syscall_id.h"
+#include "linx_exit_extra_id.h"
 
 /**
  * 需要过滤掉的pid集合
@@ -18,7 +19,7 @@ __weak char g_filter_comms[LINX_BPF_FILTER_COMM_MAX_SIZE][LINX_COMM_MAX_SIZE];
 /**
  * 表示需要采集哪些系统调用
  */
-__weak uint8_t g_interesting_syscalls_table[LINX_SYSCALL_MAX_IDX];
+__weak uint8_t g_interesting_syscalls_table[LINX_SYSCALL_ID_MAX];
 
 /**
  * 应用层获取到的启动时间
@@ -43,7 +44,7 @@ __weak uint8_t g_drop_failed;
  */
 struct {
 	__uint(type, BPF_MAP_TYPE_PROG_ARRAY);
-	__uint(max_entries, LINX_SYSCALL_MAX_IDX);
+	__uint(max_entries, LINX_SYSCALL_ID_MAX);
 	__type(key, uint32_t);
 	__type(value, uint32_t);
 } syscall_enter_tail_table __weak SEC(".maps");
@@ -53,10 +54,20 @@ struct {
  */
 struct {
 	__uint(type, BPF_MAP_TYPE_PROG_ARRAY);
-	__uint(max_entries, LINX_SYSCALL_MAX_IDX);
+	__uint(max_entries, LINX_SYSCALL_ID_MAX);
 	__type(key, uint32_t);
 	__type(value, uint32_t);
 } syscall_exit_tail_table __weak SEC(".maps");
+
+/**
+ * 需要多个处理的系统调用
+*/
+struct {
+	__uint(type, BPF_MAP_TYPE_PROG_ARRAY);
+	__uint(max_entries, LINX_EXIT_EXTRA_ID_MAX);
+	__type(key, uint32_t);
+	__type(value, uint32_t);
+} syscall_exit_extra_tail_table __weak SEC(".maps");
 
 /**
  * 消息交互的环形缓冲区

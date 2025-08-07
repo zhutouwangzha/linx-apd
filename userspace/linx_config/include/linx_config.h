@@ -26,7 +26,7 @@ typedef struct {
                 bool drop_failed;
                 uint32_t filter_pids[LINX_BPF_FILTER_PID_MAX_SIZE];
                 uint8_t filter_comms[LINX_BPF_FILTER_COMM_MAX_SIZE][LINX_COMM_MAX_SIZE];
-                uint8_t interest_syscall_table[LINX_SYSCALL_MAX_IDX];
+                uint8_t interest_syscall_table[LINX_SYSCALL_ID_MAX];
             } ebpf;
         } data;
     } engine;

@@ -1,0 +1,29 @@
+#ifndef __LINX_FIELD_TYPE_H__
+#define __LINX_FIELD_TYPE_H__ 
+
+typedef enum {
+    LINX_FIELD_TYPE_UNKNOWN = 0,
+    LINX_FIELD_TYPE_INT8,
+    LINX_FIELD_TYPE_UINT8,
+    LINX_FIELD_TYPE_INT16,
+    LINX_FIELD_TYPE_UINT16,
+    LINX_FIELD_TYPE_INT32,
+    LINX_FIELD_TYPE_UINT32,
+    LINX_FIELD_TYPE_INT64,
+    LINX_FIELD_TYPE_UINT64,
+    LINX_FIELD_TYPE_CHARBUF,             /* 可打印的字符串，数组 */
+    LINX_FIELD_TYPE_BYTEBUF,             /* 二进制数据，不方便打印 */
+    LINX_FIELD_TYPE_CHARBUF_ARRAY,       /* 可打印的字符串指针 */
+    LINX_FIELD_TYPE_CHARBUF_PAIR_ARRAY,  /* 字符串数组指针*/
+    LINX_FIELD_TYPE_BYTEBUF_ARRAY,       /* 二进制数据指针 */
+    LINX_FIELD_TYPE_BOOL,
+    LINX_FIELD_TYPE_FLOAT,
+    LINX_FIELD_TYPE_DOUBLE,
+    LINX_FIELD_TYPE_UID,
+    LINX_FIELD_TYPE_PID,
+    LINX_FIELD_TYPE_SOCKTUPLE,
+    LINX_FIELD_TYPE_STRUCT,             /* 结构体指针，用于带参数的字段解析 */
+    LINX_FIELD_TYPE_MAX
+} linx_field_type_t;
+
+#endif /* __LINX_FIELD_TYPE_H__ */

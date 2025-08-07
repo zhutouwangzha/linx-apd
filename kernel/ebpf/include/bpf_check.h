@@ -52,7 +52,7 @@ static inline int check_drop_failed(void)
 
 static inline int check_interesting_syscall(uint32_t syscall_id)
 {
-    if (syscall_id < 0 || syscall_id >= LINX_SYSCALL_MAX_IDX) {
+    if (syscall_id < 0 || syscall_id >= LINX_SYSCALL_ID_MAX) {
         return 0;
     }
 

@@ -28,6 +28,8 @@ int linx_process_cache_update_async(pid_t pid);
 
 int linx_process_cache_update_sync(pid_t pid);
 
+int linx_process_cache_update(linx_process_info_t *info);
+
 int linx_process_cache_delete(pid_t pid);
 
 int linx_process_cache_cleanup(void);
