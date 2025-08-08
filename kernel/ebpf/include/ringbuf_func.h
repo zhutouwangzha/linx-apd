@@ -279,7 +279,7 @@ static inline void linx_ringbuf_load_event(linx_ringbuf_t *ringbuf, linx_event_t
 
     bpf_get_current_comm(&event->comm, LINX_COMM_MAX_SIZE);
     // linx_get_task_file(task, event);
-    // linx_get_process_cmdline(task, &event->cmdline[0]);
+    linx_get_process_cmdline(task, &event->cmdline[0]);
     // linx_get_comm_fullpath(task, &event->fullpath[0]);
     // linx_get_parent_fullpath(task , &event->p_fullpath[0]);
 

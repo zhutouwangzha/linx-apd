@@ -48,14 +48,14 @@ int BPF_PROG(sendto_x, struct pt_regs *regs, long ret)
     unsigned long args[3] = {0};
     extract__network_args(args, 3, regs);
 
-    // int64_t bytes_to_read = ret > 0 ? ret : args[2];
-    // uint16_t snaplen = 128;
-    // if ((int64_t)snaplen > bytes_to_read) {
-    //     snaplen = bytes_to_read;
-    // }
+    int64_t bytes_to_read = ret > 0 ? ret : args[2];
+    uint16_t snaplen = 128;
+    if ((int64_t)snaplen > bytes_to_read) {
+        snaplen = bytes_to_read;
+    }
 
-    // unsigned long sent_data_pointer = args[1];
-    // linx_ringbuf_store_bytebuf(ringbuf, sent_data_pointer, snaplen, USER);
+    unsigned long sent_data_pointer = args[1];
+    linx_ringbuf_store_bytebuf(ringbuf, sent_data_pointer, snaplen, USER);
 
     linx_ringbuf_submit_event(ringbuf);
 

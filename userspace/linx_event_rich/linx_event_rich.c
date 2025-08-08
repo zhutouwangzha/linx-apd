@@ -17,6 +17,7 @@ static int update_field_base(pid_t pid)
 {
     field_update_table_t tables[] = {
         {"evt", &evt},
+        {"fd", &evt.fd},
         {"proc", (void *)linx_process_cache_get(pid)},
         {"user", (void *)linx_machine_status_get_user()},
         {"group", (void *)linx_machine_status_get_group()},
@@ -25,7 +26,7 @@ static int update_field_base(pid_t pid)
     return linx_hash_map_update_tables_base(tables, sizeof(tables) / sizeof(tables[0]));
 }
 
-static int linx_event_rich_bind_field(void)
+static int bind_field_evt(void)
 {
     int ret;
 
@@ -47,6 +48,40 @@ static int linx_event_rich_bind_field(void)
         LINX_LOG_ERROR("linx_hash_map_add_field_batch failed");
         return -1;
     }
+
+    return ret;
+}
+
+static int bind_field_fd(void)
+{
+    int ret;
+
+    BEGIN_FIELD_MAPPINGS(evt)
+        FIELD_MAP(event_t, num, LINX_FIELD_TYPE_UINT64)
+        FIELD_MAP(event_t, time, LINX_FIELD_TYPE_CHARBUF)
+        FIELD_MAP(event_t, type, LINX_FIELD_TYPE_CHARBUF_ARRAY)
+        FIELD_MAP(event_t, args, LINX_FIELD_TYPE_CHARBUF)
+        FIELD_MAP(event_t, rawarg, LINX_FIELD_TYPE_STRUCT)
+        FIELD_MAP(event_t, arg, LINX_FIELD_TYPE_STRUCT)
+        FIELD_MAP(event_t, res, LINX_FIELD_TYPE_CHARBUF)
+        FIELD_MAP(event_t, rawres, LINX_FIELD_TYPE_CHARBUF)
+        FIELD_MAP(event_t, failed, LINX_FIELD_TYPE_BOOL)
+        FIELD_MAP(event_t, dir, LINX_FIELD_TYPE_CHARBUF)
+    END_FIELD_MAPPINGS(evt)
+
+    ret = linx_hash_map_add_field_batch("evt", evt_mappings, evt_mappings_count);
+    if (ret) {
+        LINX_LOG_ERROR("linx_hash_map_add_field_batch failed");
+        return -1;
+    }
+
+    return ret;
+}
+
+static int linx_event_rich_bind_field(void)
+{
+    int ret = bind_field_evt();
+    // ret = ret ? : bind_field_fd();
 
     return ret;
 }
@@ -153,6 +188,23 @@ int linx_event_rich(linx_event_t *event)
 
     rich_event_clean(event);
 
+    /**
+     * 更新事件参数相关内容
+    */
+    rich_event_args(event);
+
+    /**
+     * 根据不同的事件，进行不同的上下文丰富
+    */
+    switch (event->type) {
+        case LINX_EVENT_TYPE_EXECVE_X:
+            if (strcmp(event->comm, "find") == 0)
+                rich_execve_exit(event);
+            break;
+        default:
+            break;
+    }
+
     snprintf(evt.time + len, sizeof(evt.time) - len, ".%09lu", remaining_ns);
 
     evt.num = event->type;
@@ -167,22 +219,6 @@ int linx_event_rich(linx_event_t *event)
     } else {
         evt.failed = true;
         strcpy(evt.res, "ERRNO");
-    }
-
-    /**
-     * 更新事件参数相关内容
-    */
-    rich_event_args(event);
-
-    /**
-     * 根据不同的事件，进行不同的上下文丰富
-    */
-    switch (event->type) {
-        case LINX_EVENT_TYPE_EXECVE_X:
-            rich_execve_exit(event);
-            break;
-        default:
-            break;
     }
 
     ret = update_field_base(event->pid);

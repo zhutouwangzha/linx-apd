@@ -214,7 +214,7 @@ bool linx_lexer_field_transformer_val(linx_lexer_t *lexer)
 static char *unescape_str(char *str)
 {
     int len = strlen(str);
-    char *dest = malloc(len);
+    char *dest = malloc(len - 1);
     char *p;
 
     if (!dest) {
@@ -224,7 +224,7 @@ static char *unescape_str(char *str)
 
     p = dest;
 
-    for (int i = i; i < len; i++) {
+    for (int i = 1; i < len - 1; i++) {
         if (str[i] == '\\') {
             i += 1;
 

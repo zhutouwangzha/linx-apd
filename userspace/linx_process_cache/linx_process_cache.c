@@ -351,7 +351,8 @@ static void *cleaner_thread_func(void *arg, int *should_stop)
             if ((info->is_rich && 
                  (now - info->start_time) > LINX_PROCESS_CACHE_EXPIRE_TIME) ||
                 (!info->is_alive && info->exit_time > 0 &&
-                (now - info->exit_time) > LINX_PROCESS_CACHE_EXPIRE_TIME)) {
+                (now - info->exit_time) > LINX_PROCESS_CACHE_EXPIRE_TIME)) 
+            {
                 HASH_DEL(g_process_cache->hash_table, info);
                 free_process_info(info);
             }

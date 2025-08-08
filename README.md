@@ -1457,7 +1457,7 @@ int linx_yaml_get_bool(linx_yaml_node_t *root, const char *path, int default_val
 
 14. 当前 linx_event_table_t 是以系统调用号 * 2 作为数组的总数量的，但是系统调用号并不是连续的，所以导致数组中的某一个可能没有初始化，其中的数据全为空，若访问可能出现问题。
 
-15. 044-sendto.bpf.c、045-recvfrom.bpf.c 、read、逻辑没有完全疏通
+15. sendto、recvfrom 、read、write逻辑没有完全疏通，因为都涉及到网络，所以需要后面在弄。
 
 # 开发计划
 
