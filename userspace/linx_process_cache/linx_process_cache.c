@@ -75,14 +75,14 @@ static int read_proc_stat(pid_t pid, linx_process_info_t *info)
     strncpy(info->name, start + 1, name_len);
     info->name[name_len] = '\0';
 
-    ret = sscanf(end + 2, " %c %d %d %u %*d %*d %*u %*u %*u %*u %*u %lu %lu "
+    ret = sscanf(end + 2, " %c %d %d %u %u %*d %*u %*u %*u %*u %*u %lu %lu "
                  "%*d %*d %d %d %*d %*d %lu %lu %ld",
-                 &state, &info->ppid, &info->pgid, &info->sid,
+                 &state, &info->ppid, &info->pgid, &info->sid, &info->tty,
                  &info->utime, &info->stime,
                  &info->priority, &info->nice,
                  &info->start_time, &info->vsize,
                  &info->rss);
-    if (ret < 10) {
+    if (ret < 11) {
         fclose(fp);
         return -1;
     }
@@ -157,47 +157,6 @@ static int read_proc_cwd(pid_t pid, linx_process_info_t *info)
         info->cwd[len] = '\0';
     } else {
         info->cwd[0] = '\0';
-    }
-    
-    return 0;
-}
-
-static int read_proc_tty(pid_t pid, linx_process_info_t *info)
-{
-    char path[PROC_PATH_MAX_LEN];
-    char buffer[1024];
-    FILE *fp;
-    char *start, *end;
-    
-    snprintf(path, sizeof(path), "/proc/%d/stat", pid);
-    fp = fopen(path, "r");
-    if (!fp) {
-        info->tty = 0;
-        return -1;
-    }
-    
-    if (fgets(buffer, sizeof(buffer), fp) == NULL) {
-        fclose(fp);
-        info->tty = 0;
-        return -1;
-    }
-    
-    fclose(fp);
-    
-    // 找到进程名的结束位置（最后一个')'）
-    start = strchr(buffer, '(');
-    end = strrchr(buffer, ')');
-    if (!start || !end || end <= start) {
-        info->tty = 0;
-        return -1;
-    }
-    
-    // 从')'之后开始解析字段
-    // 格式: state ppid pgrp session tty_nr ...
-    int ppid, pgrp, session;
-    if (sscanf(end + 2, " %*c %d %d %d %u", &ppid, &pgrp, &session, &info->tty) < 4) {
-        info->tty = 0;
-        return -1;
     }
     
     return 0;
@@ -355,9 +314,9 @@ static linx_process_info_t *create_process_info(pid_t pid)
     info->is_rich = false;
     
     // 初始化默认值
-    info->tty = 0;
     info->loginuid = (uint32_t)-1;
     info->cmdnargs = 0;
+    // TTY会在read_proc_stat中设置
     
     // 读取基本进程信息（必需的）
     if (read_proc_stat(pid, info) < 0) {
@@ -378,9 +337,6 @@ static linx_process_info_t *create_process_info(pid_t pid)
     
     // 读取当前工作目录
     read_proc_cwd(pid, info);
-    
-    // 读取TTY信息
-    read_proc_tty(pid, info);
     
     // 读取login UID信息
     read_proc_loginuid(pid, info);
