@@ -450,13 +450,29 @@ linx_process_info_t *linx_process_cache_get(pid_t pid)
     }
 
     pthread_rwlock_rdlock(&g_process_cache->lock);
-
     HASH_FIND_INT(g_process_cache->hash_table, &pid, info);
-    if (!info) {
-        info = create_process_info(pid);
-    }
-
     pthread_rwlock_unlock(&g_process_cache->lock);
+
+    if (!info) {
+        // 当找不到时，创建新的进程信息并添加到哈希表
+        info = create_process_info(pid);
+        if (info) {
+            pthread_rwlock_wrlock(&g_process_cache->lock);
+            
+            // 再次检查，防止并发情况下重复添加
+            linx_process_info_t *existing_info = NULL;
+            HASH_FIND_INT(g_process_cache->hash_table, &pid, existing_info);
+            if (!existing_info) {
+                HASH_ADD_INT(g_process_cache->hash_table, pid, info);
+            } else {
+                // 如果在并发情况下其他线程已经添加了，释放当前创建的并返回已存在的
+                free_process_info(info);
+                info = existing_info;
+            }
+            
+            pthread_rwlock_unlock(&g_process_cache->lock);
+        }
+    }
 
     return info;
 }
@@ -659,4 +675,41 @@ void linx_process_cache_stats(int *total, int *alive, int *expired)
     if (expired) {
         *expired = e;
     }
+}
+
+// 新增函数：查找或创建进程缓存
+linx_process_info_t *linx_process_cache_get_or_create(pid_t pid)
+{
+    linx_process_info_t *info = NULL;
+
+    if (!g_process_cache) {
+        return NULL;
+    }
+
+    pthread_rwlock_rdlock(&g_process_cache->lock);
+    HASH_FIND_INT(g_process_cache->hash_table, &pid, info);
+    pthread_rwlock_unlock(&g_process_cache->lock);
+
+    if (!info) {
+        // 创建新的进程信息并添加到哈希表
+        info = create_process_info(pid);
+        if (info) {
+            pthread_rwlock_wrlock(&g_process_cache->lock);
+            
+            // 再次检查，防止并发情况下重复添加
+            linx_process_info_t *existing_info = NULL;
+            HASH_FIND_INT(g_process_cache->hash_table, &pid, existing_info);
+            if (!existing_info) {
+                HASH_ADD_INT(g_process_cache->hash_table, pid, info);
+            } else {
+                // 如果在并发情况下其他线程已经添加了，释放当前创建的并返回已存在的
+                free_process_info(info);
+                info = existing_info;
+            }
+            
+            pthread_rwlock_unlock(&g_process_cache->lock);
+        }
+    }
+
+    return info;
 }
