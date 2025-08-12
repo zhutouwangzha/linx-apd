@@ -1,5 +1,7 @@
 # 简介
 
+更多实现概述与模块规划请参考：[实现概述与模块规划](./实现概述与模块规划.md)
+
 ## 目录结构
 
 当前`linx_apd`代码目录结构如下：
@@ -1460,6 +1462,8 @@ int linx_yaml_get_bool(linx_yaml_node_t *root, const char *path, int default_val
 15. sendto、recvfrom 、read、write逻辑没有完全疏通，因为都涉及到网络，所以需要后面在弄。
 
 # 开发计划
+
+更系统的模块路线请见：[实现概述与模块规划](./实现概述与模块规划.md)
 
 ## 现阶段需要的系统调用
 
