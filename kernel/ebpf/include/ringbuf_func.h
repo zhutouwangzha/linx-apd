@@ -254,6 +254,15 @@ static inline int linx_get_parent_fullpath(struct task_struct *task, char *fullp
     // return (int)linx_get_file_path(file, fullpath, LINX_PATH_MAX_SIZE);
 }
 
+static inline uint8_t maps_get_event_num_params(linx_event_type_t type)
+{
+    if (type < 0 || type >= LINX_EVENT_TYPE_MAX) {
+        return 0;
+    }
+
+    return g_event_params_table[type];
+}
+
 static inline linx_ringbuf_t *linx_ringbuf_get(void)
 {
     uint32_t cpuid = (uint32_t)bpf_get_smp_processor_id();
@@ -275,6 +284,7 @@ static inline void linx_ringbuf_load_event(linx_ringbuf_t *ringbuf, linx_event_t
     event->time = g_boot_time + bpf_ktime_get_boot_ns();
     event->res = (uint64_t)res;
     event->type = (uint32_t)type;
+    // event->nparams = maps_get_event_num_params(type);
     event->size = 0;
 
     bpf_get_current_comm(&event->comm, LINX_COMM_MAX_SIZE);

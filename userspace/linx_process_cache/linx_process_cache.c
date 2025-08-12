@@ -22,14 +22,18 @@ static int linx_process_cache_bind_field(void)
         FIELD_MAP(linx_process_info_t, pid, LINX_FIELD_TYPE_INT32)
         FIELD_MAP(linx_process_info_t, ppid, LINX_FIELD_TYPE_INT32)
         FIELD_MAP(linx_process_info_t, pgid, LINX_FIELD_TYPE_INT32)
-        FIELD_MAP(linx_process_info_t, sid, LINX_FIELD_TYPE_INT32)
-        FIELD_MAP(linx_process_info_t, uid, LINX_FIELD_TYPE_INT32)
-        FIELD_MAP(linx_process_info_t, gid, LINX_FIELD_TYPE_INT32)
+        FIELD_MAP(linx_process_info_t, sid, LINX_FIELD_TYPE_UINT32)
+        FIELD_MAP(linx_process_info_t, uid, LINX_FIELD_TYPE_UINT32)
+        FIELD_MAP(linx_process_info_t, gid, LINX_FIELD_TYPE_UINT32)
+        FIELD_MAP(linx_process_info_t, tty, LINX_FIELD_TYPE_UINT32)
+        FIELD_MAP(linx_process_info_t, loginuid, LINX_FIELD_TYPE_UINT32)
+        FIELD_MAP(linx_process_info_t, cmdnargs, LINX_FIELD_TYPE_UINT64)
         FIELD_MAP(linx_process_info_t, name, LINX_FIELD_TYPE_CHARBUF)
-        FIELD_MAP(linx_process_info_t, comm, LINX_FIELD_TYPE_CHARBUF)
         FIELD_MAP(linx_process_info_t, cmdline, LINX_FIELD_TYPE_CHARBUF)
         FIELD_MAP(linx_process_info_t, exe, LINX_FIELD_TYPE_CHARBUF)
+        FIELD_MAP(linx_process_info_t, exepath, LINX_FIELD_TYPE_CHARBUF)
         FIELD_MAP(linx_process_info_t, cwd, LINX_FIELD_TYPE_CHARBUF)
+        FIELD_MAP(linx_process_info_t, args, LINX_FIELD_TYPE_CHARBUF)
     END_FIELD_MAPPINGS(proc)
 
     return linx_hash_map_add_field_batch("proc", proc_mappings, proc_mappings_count);
@@ -68,15 +72,13 @@ static int read_proc_stat(pid_t pid, linx_process_info_t *info)
         name_len = PROC_COMM_MAX_LEN - 1;
     }
 
-    strncpy(info->comm, start + 1, name_len);
-    info->comm[name_len] = '\0';
+    strncpy(info->name, start + 1, name_len);
+    info->name[name_len] = '\0';
 
-    strncpy(info->name, info->comm, name_len + 1);
-
-    ret = sscanf(end + 2, " %c %d %d %d %*d %*d %*u %*u %*u %*u %*u %lu %lu "
+    ret = sscanf(end + 2, " %c %d %d %u %u %*d %*u %*u %*u %*u %*u %lu %lu "
                  "%*d %*d %d %d %*d %*d %lu %lu %ld",
                  &state, &info->ppid, &info->pgid, &info->sid,
-                 &info->utime, &info->stime,
+                 &info->tty, &info->utime, &info->stime,
                  &info->priority, &info->nice,
                  &info->start_time, &info->vsize,
                  &info->rss);
@@ -123,9 +125,9 @@ static int read_proc_status(pid_t pid, linx_process_info_t *info)
 
     while (fgets(line, sizeof(line), fp)) {
         if (strncmp(line, "Uid:", 4) == 0) {
-            sscanf(line, "Uid:\t%d", &info->uid);
+            sscanf(line, "Uid:\t%u", &info->uid);
         } else if (strncmp(line, "Gid:", 4) == 0) {
-            sscanf(line, "Gid:\t%d", &info->gid);
+            sscanf(line, "Gid:\t%u", &info->gid);
         } else if (strncmp(line, "VmSize:", 7) == 0) {
             sscanf(line, "VmSize:\t%lu kB", &info->vsize);
             info->vsize *= 1024; /* 转换为字节 */
@@ -142,49 +144,123 @@ static int read_proc_status(pid_t pid, linx_process_info_t *info)
     return 0;
 }
 
+static int read_proc_loginuid(pid_t pid, linx_process_info_t *info)
+{
+    char path[PROC_PATH_MAX_LEN];
+    FILE *fp;
+
+    snprintf(path, sizeof(path), "/proc/%d/loginuid", pid);
+    fp = fopen(path, "r");
+    if (!fp) {
+        info->loginuid = (uint32_t)-1;
+        return -1;
+    }
+
+    if (fscanf(fp, "%u", &info->loginuid) != 1) {
+        info->loginuid = (uint32_t)-1;
+        fclose(fp);
+        return -1;
+    }
+
+    fclose(fp);
+    return 0;
+}
+
 static int read_proc_cmdline(pid_t pid, linx_process_info_t *info)
 {
     char path[PROC_PATH_MAX_LEN];
-    int fd;
-    ssize_t len;
-    
+    int fd, arg_count = 0;
+    ssize_t len, arg_len;
+    char buffer[PROC_CMDLINE_LEN + 4096];
+    char *ptr;
+
+    info->cmdline[0] = '\0';
+    info->exe[0] = '\0';
+    info->args[0] = '\0';
+    info->cmdnargs = 0;
+
     snprintf(path, sizeof(path), "/proc/%d/cmdline", pid);
     fd = open(path, O_RDONLY);
     if (fd < 0) {
         return -1;
     }
-    
-    len = read(fd, info->cmdline, PROC_CMDLINE_LEN - 1);
-    if (len > 0) {
-        info->cmdline[len] = '\0';
-        /* 将NULL字符替换为空格 */
-        for (ssize_t i = 0; i < len - 1; i++) {
-            if (info->cmdline[i] == '\0') {
-                info->cmdline[i] = ' ';
-            }
+
+    len = read(fd, buffer, sizeof(buffer) - 1);
+    close(fd);
+
+    if (len <= 0) {
+        return -1;
+    }
+
+    buffer[len] = '\0';
+
+    ptr = buffer;
+
+    if (ptr < buffer + len) {
+        arg_len = strlen(ptr);
+        if (arg_len > 0) {
+            strncpy(info->exe, ptr, PROC_PATH_MAX_LEN - 1);
+            info->exe[PROC_PATH_MAX_LEN - 1] = '\0';
+
+            strncpy(info->cmdline, ptr, PROC_CMDLINE_LEN - 1);
+
+            ptr += arg_len + 1;
+            arg_count++;
         }
-    } else {
-        info->cmdline[0] = '\0';
+    }
+
+    size_t cmdline_pos = strlen(info->cmdline);
+    size_t args_pos = 0;
+
+    while (ptr < buffer + len &&  *ptr != '\0') {
+        arg_len = strlen(ptr);
+        if (arg_len == 0) {
+            break;
+        }
+
+        if (cmdline_pos + 1 + arg_len < PROC_CMDLINE_LEN - 1) {
+            if (cmdline_pos > 0) {
+                info->cmdline[cmdline_pos++] = ' ';
+            }
+
+            strcpy(info->cmdline + cmdline_pos, ptr);
+            cmdline_pos += arg_len;
+        }
+
+        if (args_pos + arg_len < sizeof(info->args) - 1) {
+            if (args_pos > 0) {
+                info->args[args_pos++] = ' ';
+            }
+
+            strcpy(info->args + args_pos, ptr);
+            args_pos += arg_len;
+        }
+
+        ptr += arg_len + 1;
+        arg_count++;
     }
     
-    close(fd);
+    info->cmdnargs = arg_count;
+    info->cmdline[PROC_CMDLINE_LEN - 1] = '\0';
+    info->args[sizeof(info->args) - 1] = '\0';
+
     return 0;
 }
 
-static int read_proc_exe(pid_t pid, linx_process_info_t *info)
+static int read_proc_exepath(pid_t pid, linx_process_info_t *info)
 {
     char path[PROC_PATH_MAX_LEN];
     ssize_t len;
     
     snprintf(path, sizeof(path), "/proc/%d/exe", pid);
-    len = readlink(path, info->exe, PROC_PATH_MAX_LEN - 1);
+    len = readlink(path, info->exepath, PROC_PATH_MAX_LEN - 1);
     if (len > 0) {
         info->exe[len] = '\0';
     } else {
         info->exe[0] = '\0';
     }
     
-    return 0;
+    return (len > 0) ? 0 : -1;
 }
 
 static int read_proc_cwd(pid_t pid, linx_process_info_t *info)
@@ -220,19 +296,30 @@ static linx_process_info_t *create_process_info(pid_t pid)
     info->update_time = info->create_time;
     info->is_alive = true;
     info->is_rich = false;
-    
+    info->tty = 0;
+    info->loginuid = (uint32_t)-1;
+    info->cmdnargs = 0;
+
     /* 读取进程信息 */
-    if (read_proc_stat(pid, info) < 0 ||
-        read_proc_status(pid, info) < 0) {
+    if (read_proc_stat(pid, info) < 0) {
+        free(info);
+        return NULL;
+    }
+
+    if (read_proc_status(pid, info) < 0) {
         free(info);
         return NULL;
     }
 
     /* 尝试读取其他信息，失败不影响创建 */
     read_proc_cmdline(pid, info);
-    read_proc_exe(pid, info);
+
+    read_proc_exepath(pid, info);
+
     read_proc_cwd(pid, info);
-    
+
+    read_proc_loginuid(pid, info);
+
     return info;
 }
 
@@ -450,13 +537,26 @@ linx_process_info_t *linx_process_cache_get(pid_t pid)
     }
 
     pthread_rwlock_rdlock(&g_process_cache->lock);
-
     HASH_FIND_INT(g_process_cache->hash_table, &pid, info);
+    pthread_rwlock_unlock(&g_process_cache->lock);
+
     if (!info) {
         info = create_process_info(pid);
-    }
+        if (info) {
+            pthread_rwlock_wrlock(&g_process_cache->lock);
 
-    pthread_rwlock_unlock(&g_process_cache->lock);
+            linx_process_info_t *existing_info = NULL;
+            HASH_FIND_INT(g_process_cache->hash_table, &pid, existing_info);
+            if (!existing_info) {
+                HASH_ADD_INT(g_process_cache->hash_table, pid, info);
+            } else {
+                free_process_info(info);
+                info = existing_info;
+            }
+
+            pthread_rwlock_unlock(&g_process_cache->lock);
+        }
+    }
 
     return info;
 }
@@ -543,9 +643,10 @@ int linx_process_cache_update(linx_process_info_t *info)
 
     pid = info->pid;
 
-    pthread_rwlock_wrlock(&g_process_cache->lock);
-
+    pthread_rwlock_rdlock(&g_process_cache->lock);
     HASH_FIND_INT(g_process_cache->hash_table, &pid, old_info);
+    pthread_rwlock_unlock(&g_process_cache->lock);
+
     if (old_info) {
         info->create_time = old_info->create_time;
 
@@ -554,12 +655,15 @@ int linx_process_cache_update(linx_process_info_t *info)
             info->is_alive = false;
         }
 
+        pthread_rwlock_wrlock(&g_process_cache->lock);
         HASH_DEL(g_process_cache->hash_table, old_info);
+        pthread_rwlock_unlock(&g_process_cache->lock);
+
         free_process_info(old_info);
     }
 
+    pthread_rwlock_wrlock(&g_process_cache->lock);
     HASH_ADD_INT(g_process_cache->hash_table, pid, info);
-
     pthread_rwlock_unlock(&g_process_cache->lock);
 
     return 0;

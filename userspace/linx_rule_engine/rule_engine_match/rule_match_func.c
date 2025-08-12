@@ -138,9 +138,13 @@ bool str_assign_matcher(void *context)
     int ret;
     linx_field_type_t type;
     str_context_t *ctx = (str_context_t *)context;
-    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     char *value;
     char buffer[256] = {0};
+
+    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
+    if (!value_ptr) {
+        return false;
+    }
 
     switch (type) {
     case LINX_FIELD_TYPE_CHARBUF:
@@ -179,9 +183,13 @@ bool str_contains_matcher(void *context)
 {
     linx_field_type_t type;
     str_context_t *ctx = (str_context_t *)context;
-    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     char *value;
     const char *result;
+
+    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
+    if (!value_ptr) {
+        return false;
+    }
 
     switch (type) {
     case LINX_FIELD_TYPE_CHARBUF:
@@ -204,9 +212,13 @@ bool str_icontains_matcher(void *context)
 {
     linx_field_type_t type;
     str_context_t *ctx = (str_context_t *)context;
-    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     char *value, *lower1, *lower2;
     const char *result;
+
+    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
+    if (!value_ptr) {
+        return false;
+    }
 
     switch (type) {
     case LINX_FIELD_TYPE_CHARBUF:
@@ -239,8 +251,12 @@ bool str_startswith_matcher(void *context)
 {
     linx_field_type_t type;
     str_context_t *ctx = (str_context_t *)context;
-    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     char *value;
+
+    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
+    if (!value_ptr) {
+        return false;
+    }
 
     switch (type) {
     case LINX_FIELD_TYPE_CHARBUF:
@@ -265,9 +281,13 @@ bool str_endswith_matcher(void *context)
 {
     linx_field_type_t type;
     str_context_t *ctx = (str_context_t *)context;
-    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     char *value;
     size_t value_len;
+
+    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
+    if (!value_ptr) {
+        return false;
+    }
 
     switch (type) {
     case LINX_FIELD_TYPE_CHARBUF:
@@ -297,10 +317,14 @@ bool list_in_matcher(void *context)
     int ret;
     linx_field_type_t type;
     list_context_t *ctx = (list_context_t *)context;
-    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     char *value;
     size_t value_len;
     char buffer[256] = {0};
+
+    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
+    if (!value_ptr) {
+        return false;
+    }
 
     switch (type) {
     case LINX_FIELD_TYPE_CHARBUF:

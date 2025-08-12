@@ -9,6 +9,7 @@
 typedef struct {
     char name[32];
     linx_field_type_t type;
+    const void *info;
 } linx_param_info_t;
 
 typedef struct {

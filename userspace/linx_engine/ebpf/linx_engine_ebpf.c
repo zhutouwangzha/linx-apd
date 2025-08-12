@@ -54,6 +54,8 @@ int ebpf_init(void)
 
     linx_ebpf_set_interesting_syscalls_table(s_bpf_manager.skel);
 
+    // linx_ebpf_set_event_num_params(s_bpf_manager.skel);
+
     return ret;
 }
 

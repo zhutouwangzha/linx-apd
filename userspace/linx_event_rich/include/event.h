@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "linx_size_define.h"
 #include "fd_struct.h"
 
 typedef struct {
@@ -23,6 +24,7 @@ typedef struct {
     char dir[1];    /* > 表示进入事件，< 表示退出事件 */
 
     linx_fd_t fd;
+    uint8_t last_event[LINX_EVENT_MAX_SIZE];
 } event_t;
 
 #endif /* __EVENT_H__ */

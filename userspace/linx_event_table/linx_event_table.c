@@ -1,4 +1,5 @@
 #include "linx_event_table.h"
+#include "linx_name_value.h"
 
 const linx_event_table_t g_linx_event_table[LINX_EVENT_TYPE_MAX] = {
 	[LINX_EVENT_TYPE_READ_E] = {
@@ -34,15 +35,22 @@ const linx_event_table_t g_linx_event_table[LINX_EVENT_TYPE_MAX] = {
 		},
 	},
 	[LINX_EVENT_TYPE_OPEN_E] = {
-		"open", 0,
-		{}
-	},
-	[LINX_EVENT_TYPE_OPEN_X] = {
 		"open", 3,
 		{
-			{"filename", LINX_FIELD_TYPE_CHARBUF},
-			{"flags", LINX_FIELD_TYPE_INT32},
-			{"mode", LINX_FIELD_TYPE_UINT16},
+			{"name", LINX_FIELD_TYPE_CHARBUF},
+			{"flags", LINX_FIELD_TYPE_INT32, file_flags},
+			{"mode", LINX_FIELD_TYPE_UINT32}
+		}
+	},
+	[LINX_EVENT_TYPE_OPEN_X] = {
+		"open", 6,
+		{
+			{"fd", LINX_FIELD_TYPE_INT64},
+			{"name", LINX_FIELD_TYPE_CHARBUF},
+			{"flags", LINX_FIELD_TYPE_INT32, file_flags},
+			{"mode", LINX_FIELD_TYPE_UINT32},
+			{"dev", LINX_FIELD_TYPE_UINT32},
+			{"ino", LINX_FIELD_TYPE_UINT64}
 		},
 	},
 	[LINX_EVENT_TYPE_CLOSE_E] = {
@@ -2878,7 +2886,7 @@ const linx_event_table_t g_linx_event_table[LINX_EVENT_TYPE_MAX] = {
 		{
 			{"dirfd", LINX_FIELD_TYPE_INT64},
 			{"name", LINX_FIELD_TYPE_CHARBUF},
-			{"flags", LINX_FIELD_TYPE_INT32},
+			{"flags", LINX_FIELD_TYPE_INT32, file_flags},
 			{"mode", LINX_FIELD_TYPE_UINT32},
 		}
 	},
@@ -2888,7 +2896,7 @@ const linx_event_table_t g_linx_event_table[LINX_EVENT_TYPE_MAX] = {
 			{"fd", LINX_FIELD_TYPE_INT64},
 			{"dirfd", LINX_FIELD_TYPE_INT64},
 			{"name", LINX_FIELD_TYPE_CHARBUF},
-			{"flags", LINX_FIELD_TYPE_INT32},
+			{"flags", LINX_FIELD_TYPE_INT32, file_flags},
 			{"mode", LINX_FIELD_TYPE_UINT32},
 			{"dev", LINX_FIELD_TYPE_UINT32},
 			{"ino", LINX_FIELD_TYPE_UINT64},

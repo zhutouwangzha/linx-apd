@@ -22,6 +22,11 @@ __weak char g_filter_comms[LINX_BPF_FILTER_COMM_MAX_SIZE][LINX_COMM_MAX_SIZE];
 __weak uint8_t g_interesting_syscalls_table[LINX_SYSCALL_ID_MAX];
 
 /**
+ * 表示当前事件需要采集的参数个数
+*/
+__weak uint8_t g_event_params_table[LINX_SYSCALL_ID_MAX];
+
+/**
  * 应用层获取到的启动时间
  * 该时间+bpf中获取的时间=系统时间
  */

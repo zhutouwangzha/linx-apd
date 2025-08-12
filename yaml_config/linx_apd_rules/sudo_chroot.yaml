@@ -1,0 +1,28 @@
+- rule: Suspicious Chroot Usage After Privilege Escalation via Sudo
+  desc: Detects when the 'chroot' command is executed by a non-root login user after privilege escalation (e.g., via sudo).
+  condition: >
+    evt.type = execve
+    and proc.name = sudo
+    and user.name = root
+    and evt.arg.loginuid != val(user.name)
+    and (
+      proc.cmdline icontains "chroot /"
+    )
+  output: >
+    Suspicious use of 'chroot' after privilege escalation via sudo (pid=%proc.pid ppid=%proc.ppid loginuid=%evt.arg.loginuid user=%user.name command=%proc.cmdline)
+  priority: EMERGENCY
+  tags:
+    - system
+    - security
+    - privilege_escalation
+    - container_escape
+    - discovery
+  notify:
+    title: Sudo提权
+    content: 检测到使用Sudo chroot的提权行为，将kill相关进程。
+  operation:
+    kind: exec
+    params: 
+      - kill -9 %proc.pid
+      - proc.pid
+  chdesc: sudo chroot提权

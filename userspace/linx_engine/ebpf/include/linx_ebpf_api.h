@@ -41,4 +41,6 @@ void linx_ebpf_set_drop_failed(struct linx_bpf *skel, uint8_t value);
 
 void linx_ebpf_set_interesting_syscalls_table(struct linx_bpf *skel);
 
+void linx_ebpf_set_event_num_params(struct linx_bpf *skel);
+
 #endif /* __LINX_EBPF_API_H__ */

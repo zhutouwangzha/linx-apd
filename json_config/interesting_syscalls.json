@@ -237,7 +237,7 @@
     },
     "execve": {
       "syscall_id": 59,
-      "interesting": 1
+      "interesting": 0
     },
     "exit": {
       "syscall_id": 60,
@@ -349,7 +349,7 @@
     },
     "unlink": {
       "syscall_id": 87,
-      "interesting": 1
+      "interesting": 0
     },
     "symlink": {
       "syscall_id": 88,
@@ -997,7 +997,7 @@
     },
     "openat": {
       "syscall_id": 257,
-      "interesting": 0
+      "interesting": 1
     },
     "mkdirat": {
       "syscall_id": 258,
@@ -1021,7 +1021,7 @@
     },
     "unlinkat": {
       "syscall_id": 263,
-      "interesting": 1
+      "interesting": 0
     },
     "renameat": {
       "syscall_id": 264,

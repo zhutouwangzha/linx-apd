@@ -3,6 +3,7 @@
 #include "linx_hash_map.h"
 #include "linx_event_rich.h"
 #include "linx_event_table.h"
+#include "linx_log.h"
 
 static linx_hash_map_t *s_linx_hash_map = NULL;
 
@@ -302,7 +303,8 @@ int linx_hash_map_update_tables_base(field_update_table_t *tables, size_t num_ta
     for (size_t i = 0; i < num_tables; i++) {
         ret = linx_hash_map_update_table_base(tables[i].table_name, tables[i].base_addr);
         if (ret) {
-            return ret;
+            ret = i;
+            LINX_LOG_WARNING("update %d[%s] hash map table failed!", i, tables[i].table_name);
         }
     }
 

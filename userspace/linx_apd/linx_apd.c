@@ -38,7 +38,7 @@ static int linx_event_loop(void)
 
         ret = linx_event_rich(event);
         if (ret) {
-
+            continue;
         }
 
         ret = linx_event_queue_push();

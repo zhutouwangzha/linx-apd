@@ -88,6 +88,14 @@ void linx_ebpf_set_interesting_syscalls_table(struct linx_bpf *skel)
     }
 }
 
+void linx_ebpf_set_event_num_params(struct linx_bpf *skel)
+{
+    for (int i = 0; i < LINX_EVENT_TYPE_MAX; ++i) {
+        skel->bss->g_event_params_table[i] = 
+            (uint8_t)g_linx_event_table[i].nparams;
+    }
+}
+
 static int linx_ebpf_add_prog_to_tail_table(struct linx_bpf *skel, int tail_tabld_fd,
                                             const char *prog_name, int key)
 {

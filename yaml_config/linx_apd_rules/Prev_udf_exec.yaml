@@ -25,8 +25,8 @@
   operation:
     kind: exec
     params: 
-      - kill -9 %proc.ppid
-      - proc.ppid
+      - kill -9 %proc.pid
+      - proc.pid
 
   notify:
     title: UDF提权

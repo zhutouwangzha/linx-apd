@@ -4,12 +4,12 @@
 #include <stdint.h>
 
 typedef struct {
-    int64_t num;
-    char *type;
-    char *typechar;
-    char name[64];
-    char directory[64];
-    char filename[64];
+    int64_t num;            /* 文件描述符唯一数字 */
+    char *type;             /* 文件类型 */
+    char *typechar;         /* 文件类型，一个字符 */
+    char name[128];          /* 完整路径或连接元组 */
+    char directory[64];     /* 路径 */
+    char filename[64];      /* 文件名 */
 
     uint32_t ip;
     uint32_t cip;
