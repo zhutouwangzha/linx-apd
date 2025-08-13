@@ -157,22 +157,22 @@ linx_fd_info_t *linx_fd_info_create(pid_t pid, int64_t fd)
         net_ns = sb.st_ino;
     }
 
-	snprintf(path, PROC_PATH_MAX_LEN, "/proc/%d/fd/%ld", pid, fd);
+		 snprintf(path, PROC_PATH_MAX_LEN, "/proc/%d/fd/%ld", pid, fd);
 
-	if (-1 == stat(path, &sb)) {
-		return NULL;	
-    }
+	 if (-1 == stat(path, &sb)) {
+	 	 return NULL;	
+	     }
 
-	fd_info = calloc(1, sizeof(fd_info));
-	if (!fd_info) {
-		return NULL;
-	}
+	 fd_info = calloc(1, sizeof(linx_fd_info_t));
+	 if (!fd_info) {
+	 	 return NULL;
+	 	}
 
-	fd_info->num = fd;
+	 fd_info->num = fd;
 
-	handle_file(path, &sb, net_ns, pid, fd_info);
+	 handle_file(path, &sb, net_ns, pid, fd_info);
 
-    return fd_info;
+	     return fd_info;
 }
 
 void linx_fd_info_destroy(linx_fd_info_t *fd_info)
