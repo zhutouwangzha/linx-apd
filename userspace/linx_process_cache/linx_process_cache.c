@@ -263,9 +263,9 @@ static int read_proc_exepath(pid_t pid, linx_process_info_t *info)
     snprintf(path, sizeof(path), "/proc/%d/exe", pid);
     len = readlink(path, info->exepath, PROC_PATH_MAX_LEN - 1);
     if (len > 0) {
-        info->exe[len] = '\0';
+        info->exepath[len] = '\0';
     } else {
-        info->exe[0] = '\0';
+        info->exepath[0] = '\0';
     }
     
     return (len > 0) ? 0 : -1;
@@ -308,7 +308,9 @@ static int read_proc_fd_info(pid_t pid, linx_process_info_t *info)
 
     /* 这里需要一个配置来确定读取文件的最大个数 */
     while ((entry = readdir(dir)) != NULL) {
-        sscanf(entry->d_name, "%ld", &fd);
+        if (sscanf(entry->d_name, "%ld", &fd) != 1) {
+            continue;
+        }
 
         fdi = linx_fd_info_create(pid, fd);
         if (!fdi) {
