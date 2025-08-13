@@ -13,17 +13,16 @@
 #include "linx_event_table.h"
 #include "linx_process_cache.h"
 #include "linx_machine_status.h"
-
-void *find_info_addr = NULL;
+#include "linx_fd_info.h"
 
 static event_t evt = {0};
 
-static int update_field_base(pid_t pid)
+static int update_field_base(linx_event_t *event, int64_t fd)
 {
     field_update_table_t tables[] = {
         {"evt", &evt},
-        {"fd", &evt.fd},
-        {"proc", (void *)linx_process_cache_get(pid)},
+        {"fd", (void *)linx_process_cache_get_fd((pid_t)event->pid, fd)},
+        {"proc", (void *)linx_process_cache_get((pid_t)event->pid)},
         {"user", (void *)linx_machine_status_get_user()},
         {"group", (void *)linx_machine_status_get_group()},
     };
@@ -57,51 +56,20 @@ static int bind_field_evt(void)
     return ret;
 }
 
-static int bind_field_fd(void)
-{
-    int ret;
-
-    BEGIN_FIELD_MAPPINGS(fd)
-        FIELD_MAP(linx_fd_t, num, LINX_FIELD_TYPE_INT64)
-        FIELD_MAP(linx_fd_t, type, LINX_FIELD_TYPE_CHARBUF_ARRAY)
-        FIELD_MAP(linx_fd_t, typechar, LINX_FIELD_TYPE_CHARBUF_ARRAY)
-        FIELD_MAP(linx_fd_t, name, LINX_FIELD_TYPE_CHARBUF)
-        FIELD_MAP(linx_fd_t, directory, LINX_FIELD_TYPE_CHARBUF)
-        FIELD_MAP(linx_fd_t, filename, LINX_FIELD_TYPE_CHARBUF)
-        FIELD_MAP(linx_fd_t, ip, LINX_FIELD_TYPE_UINT32)
-        FIELD_MAP(linx_fd_t, cip, LINX_FIELD_TYPE_UINT32)
-        FIELD_MAP(linx_fd_t, sip, LINX_FIELD_TYPE_UINT32)
-        FIELD_MAP(linx_fd_t, lip, LINX_FIELD_TYPE_UINT32)
-        FIELD_MAP(linx_fd_t, rip, LINX_FIELD_TYPE_UINT32)
-        FIELD_MAP(linx_fd_t, port, LINX_FIELD_TYPE_UINT8)
-        FIELD_MAP(linx_fd_t, cport, LINX_FIELD_TYPE_UINT8)
-        FIELD_MAP(linx_fd_t, lport, LINX_FIELD_TYPE_UINT8)
-        FIELD_MAP(linx_fd_t, sport, LINX_FIELD_TYPE_UINT8)
-        FIELD_MAP(linx_fd_t, rport, LINX_FIELD_TYPE_UINT8)
-        FIELD_MAP(linx_fd_t, l4port, LINX_FIELD_TYPE_CHARBUF)
-    END_FIELD_MAPPINGS(fd)
-
-    ret = linx_hash_map_add_field_batch("fd", fd_mappings, fd_mappings_count);
-    if (ret) {
-        LINX_LOG_ERROR("linx_hash_map_add_field_batch failed");
-        return -1;
-    }
-
-    return ret;
-}
-
 static int linx_event_rich_bind_field(void)
 {
     int ret = bind_field_evt();
-    ret = ret ? : bind_field_fd();
-
     return ret;
 }
 
-static void rich_event_clean(linx_event_t *event)
+static void rich_event_clean(linx_event_type_t type)
 {
-    for (uint32_t i = 0; i < g_linx_event_table[event->type].nparams; ++i) {
-        switch (g_linx_event_table[event->type].params[i].type) {
+    if (type < 0 || type >= LINX_EVENT_TYPE_MAX) {
+        return;
+    }
+
+    for (uint32_t i = 0; i < g_linx_event_table[type].nparams; ++i) {
+        switch (g_linx_event_table[type].params[i].type) {
         case LINX_FIELD_TYPE_UID:
         case LINX_FIELD_TYPE_PID:
             free(evt.arg.data[i]);
@@ -174,11 +142,19 @@ static void rich_open_openat_enter(linx_event_t *event)
     linx_process_cache_get((pid_t)event->pid);
 }
 
-static void rich_open_openat_exit(linx_event_t *event)
+/**
+ * 返回fd
+ */
+static int64_t rich_open_openat_exit(linx_event_t *event)
 {
-    linx_fd_t *fdi = &evt.fd;
+    linx_fd_info_t *fd_info;
     char *name, *sdir;
     int64_t dirfd;
+
+    fd_info = calloc(1, sizeof(linx_fd_info_t));
+    if (!fd_info) {
+        return -1;
+    }
 
     if (event->type == LINX_EVENT_TYPE_OPENAT_X) {
         name = linx_event_get_param(event, 2);
@@ -187,14 +163,19 @@ static void rich_open_openat_exit(linx_event_t *event)
         sdir = parse_dirfd(event, name, dirfd);
     }
 
-    fdi->num = (int64_t)event->res;
-    snprintf(fdi->filename, sizeof(fdi->filename), "%s", name);
-    snprintf(fdi->directory, sizeof(fdi->directory), "%s", sdir);
+    fd_info->num = (int64_t)event->res;
+
+    snprintf(fd_info->filename, sizeof(fd_info->filename), "%s", name);
+    snprintf(fd_info->directory, sizeof(fd_info->directory), "%s", sdir);
     if (strlen(sdir)) {
-        snprintf(fdi->name, sizeof(fdi->name), "%s/%s", fdi->directory, fdi->filename);
+        snprintf(fd_info->name, sizeof(fd_info->name), "%s/%s", fd_info->directory, fd_info->filename);
     } else {
-        snprintf(fdi->name, sizeof(fdi->name), "%s", fdi->filename);
+        snprintf(fd_info->name, sizeof(fd_info->name), "%s", fd_info->filename);
     }
+
+    linx_process_cache_update_fd((pid_t)event->pid, fd_info);
+
+    return (int64_t)event->res;
 }
 
 static void rich_execve_exit(linx_event_t *event)
@@ -224,7 +205,14 @@ int linx_event_rich_init(void)
 {
     int ret = linx_event_rich_bind_field();
 
+    evt.last_event_type = -1;
+
     return ret;
+}
+
+void linx_event_rich_deinit(void)
+{
+    rich_event_clean(evt.last_event_type);
 }
 
 int linx_event_rich(linx_event_t *event)
@@ -236,6 +224,7 @@ int linx_event_rich(linx_event_t *event)
     */
 
     /* 更新 evt 结构体相关内容 */
+    int64_t fd = -1;
     uint64_t ns = event->time;
     uint64_t remaining_ns = ns % 1000000000;
     time_t seconds = ns / 1000000000;
@@ -243,7 +232,8 @@ int linx_event_rich(linx_event_t *event)
     size_t len = strftime(evt.time, sizeof(evt.time), "%Y-%m-%d %H:%M:%S", timeinfo);
     int ret;
 
-    rich_event_clean(event);
+    rich_event_clean(evt.last_event_type);
+    evt.last_event_type = event->type;
 
     snprintf(evt.time + len, sizeof(evt.time) - len, ".%09lu", remaining_ns);
 
@@ -276,7 +266,7 @@ int linx_event_rich(linx_event_t *event)
             break;
         case LINX_EVENT_TYPE_OPEN_X:
         case LINX_EVENT_TYPE_OPENAT_X:
-            rich_open_openat_exit(event);
+            fd = rich_open_openat_exit(event);
             break;
         case LINX_EVENT_TYPE_EXECVE_X:
             rich_execve_exit(event);
@@ -285,14 +275,9 @@ int linx_event_rich(linx_event_t *event)
             break;
     }
 
-    ret = update_field_base(event->pid);
+    ret = update_field_base(event, fd);
 
     return ret;
-}
-
-int linx_event_rich_deinit(void)
-{
-    return 0;
 }
 
 event_t *linx_event_rich_get(void)

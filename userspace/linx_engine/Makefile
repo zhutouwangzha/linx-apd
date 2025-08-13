@@ -19,7 +19,9 @@ OBJS := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/$(MODULE_NAME)/%.o,$(SRCS))
 # 添加包含路径
 CFLAGS += -I$(INCLUDE_DIR) -I$(TOPDIR)/include \
 		  -I$(SRC_DIR)/ebpf/include \
-		  -I$(KERNEL_DIR)/ebpf/include
+		  -I$(KERNEL_DIR)/ebpf/include \
+		  -I$(SRC_DIR)/kmod/include	\
+		  -I$(KERNEL_DIR)/kmod/include
 
 .PHONY: all clean
 

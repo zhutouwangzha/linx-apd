@@ -7,7 +7,6 @@
 
 #include "cJSON.h"
 
-#include "linx_log.h"
 #include "linx_config.h"
 #include "linx_yaml.h"
 #include "linx_event_table.h"
@@ -22,26 +21,26 @@ static int linx_config_fill_interest_syscall_table(char *file_path)
     off_t byte_read;
     int fd = open(file_path, O_RDONLY);
     if (fd < 0) {
-        LINX_LOG_ERROR("open %s failed", file_path);
+        fprintf(stderr, "open %s failed", file_path);
         return -1;
     }
 
     if (fstat(fd, &file_stat) == -1) {
-        LINX_LOG_ERROR("fstat %s failed", file_path);
+        fprintf(stderr, "fstat %s failed", file_path);
         close(fd);
         return -1;
     }
 
     jsonstr = malloc(file_stat.st_size);
     if (!jsonstr) {
-        LINX_LOG_ERROR("malloc failed");
+        fprintf(stderr, "malloc failed");
         close(fd);
         return -1;
     }
 
     byte_read = read(fd, jsonstr, file_stat.st_size);
     if (byte_read != file_stat.st_size) {
-        LINX_LOG_ERROR("read %s failed", file_path);
+        fprintf(stderr, "read %s failed", file_path);
         free(jsonstr);
         close(fd);
         return -1;
@@ -51,7 +50,7 @@ static int linx_config_fill_interest_syscall_table(char *file_path)
 
     json_config = cJSON_Parse(jsonstr);
     if (!json_config) {
-        LINX_LOG_ERROR("parse %s failed", file_path);
+        fprintf(stderr, "parse %s failed", file_path);
         free(jsonstr);
         return -1;
     }

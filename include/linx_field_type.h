@@ -19,8 +19,8 @@ typedef enum {
     LINX_FIELD_TYPE_BOOL,
     LINX_FIELD_TYPE_FLOAT,
     LINX_FIELD_TYPE_DOUBLE,
-    LINX_FIELD_TYPE_UID,
-    LINX_FIELD_TYPE_PID,
+    LINX_FIELD_TYPE_UID,                /* uint32 */
+    LINX_FIELD_TYPE_PID,                /* int64 */
     LINX_FIELD_TYPE_SOCKTUPLE,
     LINX_FIELD_TYPE_STRUCT,             /* 结构体指针，用于带参数的字段解析 */
     LINX_FIELD_TYPE_MAX

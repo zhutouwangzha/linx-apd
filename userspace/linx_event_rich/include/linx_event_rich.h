@@ -8,7 +8,7 @@
 
 int linx_event_rich_init(void);
 
-int linx_event_rich_deinit(void);
+void linx_event_rich_deinit(void);
 
 int linx_event_rich(linx_event_t *event);
 

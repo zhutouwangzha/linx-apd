@@ -27,6 +27,8 @@ void linx_resource_cleanup(void)
 {
     switch (linx_resource_cleanup_type) {
     case LINX_RESOURCE_CLEANUP_ENGINE:
+        linx_engine_cleanup();
+        /* fall through */
     case LINX_RESOURCE_CLEANUP_RULE_ENGINE:
         linx_rule_set_deinit();
         /* fall through */
@@ -34,6 +36,8 @@ void linx_resource_cleanup(void)
         linx_alert_deinit();
         /* fall through */
     case LINX_RESOURCE_CLEANUP_EVENT_RICH:
+        linx_event_rich_deinit();
+        /* fall through */
     case LINX_RESOURCE_CLEANUP_EVENT_QUEUE:
         linx_event_queue_free();
         /* fall through */

@@ -52,6 +52,7 @@ LINK_LIBS := $(addprefix -l,$(notdir $(LIBRARY_DIRS)))
 
 # ebpf 模块目录
 EBPF_DIR := $(KERNEL_DIR)/ebpf
+KMOD_DIR := $(KERNEL_DIR)/kmod
 
 # 主程序文件
 LINX_APD_SRCS := $(wildcard $(LINX_APD_DIR)/*.c)
@@ -62,11 +63,15 @@ export TOPDIR CC CFLAGS LDFLAGS BUILD_DIR DEPENDS_DIR USR_DIR KERNEL_DIR EBPF_DI
 
 .PHONY: all clean $(LIBRARY_DIRS) ebpf linx_apd
 
-all: ebpf linx_apd
+all: kmod ebpf linx_apd
 
 linx_apd: $(EXECUTABLE)
 
 ebpf: $(EBPF_DIR)
+	@echo "[Build module]: $^"
+	@$(MAKE) --no-print-directory -C $^
+
+kmod: $(KMOD_DIR)
 	@echo "[Build module]: $^"
 	@$(MAKE) --no-print-directory -C $^
 
@@ -99,6 +104,7 @@ clean:
 	done
 	@echo "[Cleaning module]: $(basename $(EBPF_DIR))"
 	@$(MAKE) --no-print-directory -C $(EBPF_DIR) clean
+	@$(MAKE) --no-print-directory -C $(KMOD_DIR) clean
 	@rm -rf $(OBJ_DIR)/linx_apd
 	@rm -rf $(BUILD_DIR)
 	@echo "[Clea complete]"

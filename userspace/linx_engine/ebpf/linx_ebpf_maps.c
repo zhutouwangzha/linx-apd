@@ -7,9 +7,9 @@
 #include "linx_config.h"
 #include "linx_exit_extra_id.h"
 
-static const char *syscall_exit_extra_names[LINX_EXIT_EXTRA_ID_MAX] = {
-    [T1_EXECV_X] = "t1_execve_x",
-};
+// static const char *syscall_exit_extra_names[LINX_EXIT_EXTRA_ID_MAX] = {
+//     [T1_EXECV_X] = "t1_execve_x",
+// };
 
 int linx_ebpf_maps_before_load(linx_ebpf_t *bpf_manager)
 {

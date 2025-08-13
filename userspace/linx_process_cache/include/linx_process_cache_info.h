@@ -8,6 +8,7 @@
 
 #include "linx_process_cache_define.h"
 #include "linx_process_state.h"
+#include "linx_fd_info.h"
 
 typedef struct {
     pid_t pid;                              /* 进程ID */
@@ -26,6 +27,8 @@ typedef struct {
     char exepath[PROC_PATH_MAX_LEN];        /* 进程的完整可执行路径 读取 /proc/pid/exe */
     char cwd[PROC_PATH_MAX_LEN];            /* 当前工作目录 */
     char args[4096];                        /*  不包括argv[0] */
+
+    linx_fd_info_t *fdlist;                 /* 当前进程对应的文件列表 */
 
     linx_process_state_t state;
     int nice;                           /* nice 值 */

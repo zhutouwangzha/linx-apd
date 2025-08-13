@@ -1,7 +1,11 @@
 #ifndef __LINX_EVENT_TABLE_H__
 #define __LINX_EVENT_TABLE_H__ 
 
+#ifdef __KERNEL__
+#include <linux/types.h>
+#else
 #include <stdint.h>
+#endif
 
 #include "linx_event_type.h"
 #include "linx_field_type.h"

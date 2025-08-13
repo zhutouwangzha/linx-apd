@@ -18,4 +18,6 @@ int linx_engine_start(void);
 
 int linx_engine_stop(void);
 
+void linx_engine_cleanup(void);
+
 #endif /* __LINX_ENGINE_H__  */

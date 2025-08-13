@@ -5,6 +5,7 @@
 
 #include "linx_process_cache_info.h"
 #include "linx_thread_pool.h"
+#include "linx_fd_info.h"
 
 typedef struct {
     linx_process_info_t *hash_table;
@@ -21,6 +22,10 @@ int linx_process_cache_init(void);
 void linx_process_cache_deinit(void);
 
 linx_process_info_t *linx_process_cache_get(pid_t pid);
+
+linx_fd_info_t *linx_process_cache_get_fd(pid_t pid, int64_t fd);
+
+int linx_process_cache_update_fd(pid_t pid, linx_fd_info_t *fd_info);
 
 int linx_process_cache_get_all(linx_process_info_t **list, int *count);
 

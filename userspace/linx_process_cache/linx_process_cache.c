@@ -14,10 +14,15 @@
 #include "linx_process_cache.h"
 #include "linx_hash_map.h"
 
+#define HASH_FIND_INT64(head, findint, out) HASH_FIND(hh, head, findint, sizeof(uint64_t), out)
+#define HASH_ADD_INT64(head, intfield, add) HASH_ADD(hh, head, intfield, sizeof(uint64_t), add)
+
 static linx_process_cache_t *g_process_cache = NULL;
 
 static int linx_process_cache_bind_field(void)
 {
+    int ret;
+
     BEGIN_FIELD_MAPPINGS(proc)
         FIELD_MAP(linx_process_info_t, pid, LINX_FIELD_TYPE_INT32)
         FIELD_MAP(linx_process_info_t, ppid, LINX_FIELD_TYPE_INT32)
@@ -36,7 +41,10 @@ static int linx_process_cache_bind_field(void)
         FIELD_MAP(linx_process_info_t, args, LINX_FIELD_TYPE_CHARBUF)
     END_FIELD_MAPPINGS(proc)
 
-    return linx_hash_map_add_field_batch("proc", proc_mappings, proc_mappings_count);
+    ret = linx_hash_map_add_field_batch("proc", proc_mappings, proc_mappings_count);
+    ret = ret ? : linx_fd_info_bind_field();
+
+    return ret;
 }
 
 static int read_proc_stat(pid_t pid, linx_process_info_t *info)
@@ -284,6 +292,46 @@ static int is_process_alive(pid_t pid)
     return (kill(pid, 0) == 0 || errno == EPERM);
 }
 
+static int read_proc_fd_info(pid_t pid, linx_process_info_t *info)
+{
+    DIR *dir;
+    int64_t fd;
+    struct dirent *entry;
+    linx_fd_info_t *fdi, *old_fdi;
+    char path[PROC_PATH_MAX_LEN];
+
+    snprintf(path, PROC_PATH_MAX_LEN, "/proc/%d/fd", pid);
+    dir = opendir(path);
+    if (dir == NULL) {
+        return -1;
+    }
+
+    /* 这里需要一个配置来确定读取文件的最大个数 */
+    while ((entry = readdir(dir)) != NULL) {
+        sscanf(entry->d_name, "%ld", &fd);
+
+        fdi = linx_fd_info_create(pid, fd);
+        if (!fdi) {
+            continue;
+        }
+
+        pthread_rwlock_wrlock(&g_process_cache->lock);
+
+        HASH_FIND_INT64(info->fdlist, &(fdi->num), old_fdi);
+        if (old_fdi) {
+            HASH_DEL(info->fdlist, old_fdi);
+            linx_fd_info_destroy(old_fdi);
+        }
+
+        HASH_ADD_INT64(info->fdlist, num, fdi);
+
+        pthread_rwlock_unlock(&g_process_cache->lock);
+    }
+
+    closedir(dir);
+    return 0;
+}
+
 static linx_process_info_t *create_process_info(pid_t pid)
 {
     linx_process_info_t *info = calloc(1, sizeof(linx_process_info_t));
@@ -319,6 +367,8 @@ static linx_process_info_t *create_process_info(pid_t pid)
     read_proc_cwd(pid, info);
 
     read_proc_loginuid(pid, info);
+
+    read_proc_fd_info(pid, info);
 
     return info;
 }
@@ -561,6 +611,69 @@ linx_process_info_t *linx_process_cache_get(pid_t pid)
     return info;
 }
 
+linx_fd_info_t *linx_process_cache_get_fd(pid_t pid, int64_t fd)
+{
+    linx_fd_info_t *fd_info = NULL;
+    linx_process_info_t *info = linx_process_cache_get(pid);
+    if (!info) {
+        return NULL;
+    }
+
+    pthread_rwlock_rdlock(&g_process_cache->lock);
+    HASH_FIND_INT64(info->fdlist, &fd, fd_info);
+    pthread_rwlock_unlock(&g_process_cache->lock);
+
+    if (!fd_info) {
+        fd_info = linx_fd_info_create(pid, fd);
+        if (fd_info) {
+            pthread_rwlock_wrlock(&g_process_cache->lock);
+
+            linx_fd_info_t *existing_info = NULL;
+            HASH_FIND_INT64(info->fdlist, &fd, existing_info);
+            if (!existing_info) {
+                HASH_ADD_INT64(info->fdlist, num, fd_info);
+            } else {
+                linx_fd_info_destroy(fd_info);
+                fd_info = existing_info;
+            }
+
+            pthread_rwlock_unlock(&g_process_cache->lock);
+        }
+    }
+
+    return fd_info;
+}
+
+int linx_process_cache_update_fd(pid_t pid, linx_fd_info_t *fd_info)
+{
+    linx_process_info_t *info;
+    linx_fd_info_t *old_fdi;
+    
+    if (!fd_info) {
+        return -1;
+    }
+
+    info = linx_process_cache_get(pid);
+    if (!info) {
+        return -1;
+    }
+
+    pthread_rwlock_wrlock(&g_process_cache->lock);
+
+    HASH_FIND_INT64(info->fdlist, &fd_info->num, old_fdi);
+
+    if (old_fdi) {
+        HASH_DEL(info->fdlist, old_fdi);
+        linx_fd_info_destroy(old_fdi);
+    }
+
+    HASH_ADD_INT64(info->fdlist, num, fd_info);
+
+    pthread_rwlock_unlock(&g_process_cache->lock);
+
+    return 0;
+}
+
 int linx_process_cache_get_all(linx_process_info_t **list, int *count)
 {
     linx_process_info_t *info;
@@ -708,6 +821,8 @@ int linx_process_cache_cleanup(void)
         if (!info->is_alive && info->exit_time > 0 &&
             (now - info->exit_time) > LINX_PROCESS_CACHE_EXPIRE_TIME)
         {
+            linx_fd_info_cleanup(info->fdlist);
+
             HASH_DEL(g_process_cache->hash_table, info);
             free_process_info(info);
             cleaned++;
