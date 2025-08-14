@@ -18,6 +18,15 @@ log:
   output: stderr
   level: ERROR
 
+# 事件处理器配置
+# 启用多线程处理以提高吞吐量
+event_processor:
+  enabled: true
+  # 事件获取线程数，默认为CPU核心数
+  fetcher_thread_count: 0  # 0表示使用CPU核心数
+  # 事件匹配线程数，默认为CPU核心数*2
+  matcher_thread_count: 0  # 0表示使用CPU核心数*2
+
 engine:
   kind: ebpf
   kmod:
@@ -61,9 +70,9 @@ json_output: false
 json_include_output_property: true
 
 # 可以选择包含没有时间戳或优先级的格式化规则输出。
-# 例如，如果一个规则指定了一个“输出”属性，
-# 如“打开的进程%proc.name”，那么“message”字段将只包含“打开的进程bash”，
-# 而“输出”字段将包含更多信息。
+# 例如，如果一个规则指定了一个"输出"属性，
+# 如"打开的进程%proc.name"，那么"message"字段将只包含"打开的进程bash"，
+# 而"输出"字段将包含更多信息。
 json_include_message_property: false
 
 # 可以选择包含单个输出字段，以便于访问。
@@ -78,7 +87,7 @@ json_include_tags_property: true
 # 输出通道的全局缓冲选项。
 # 禁用后，支持缓冲的输出通道会在每次警报时刷新输出缓冲区。
 # 这可能导致CPU使用量增加，但在将输出管道输出到另一个进程或脚本时非常有用。
-# 缓冲目前由‘ file_output ’， ‘ program_output ’和‘ std_output ’支持。
+# 缓冲目前由' file_output '， ' program_output '和' std_output '支持。
 buffered_outputs: false
 
 # rule_matching 配置键的值是：
