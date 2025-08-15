@@ -14,6 +14,12 @@ typedef struct {
     } log_config;
 
     struct {
+        bool enabled;
+        uint32_t fetcher_thread_count;
+        uint32_t matcher_thread_count;
+    } event_processor;
+
+    struct {
         char *kind;
 
         union {

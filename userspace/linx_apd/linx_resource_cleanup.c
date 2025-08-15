@@ -15,6 +15,7 @@
 #include "linx_resource_cleanup.h"
 #include "linx_process_cache.h"
 #include "linx_machine_status.h"
+#include "linx_event_processor.h"
 
 static linx_resource_cleanup_type_t linx_resource_cleanup_type = LINX_RESOURCE_CLEANUP_ERROR;
 
@@ -26,6 +27,10 @@ linx_resource_cleanup_type_t *linx_resource_cleanup_get(void)
 void linx_resource_cleanup(void)
 {
     switch (linx_resource_cleanup_type) {
+    case LINX_RESOURCE_CLEANUP_EVENT_PROCESSOR:
+        linx_event_processor_stop();
+        linx_event_processor_deinit();
+        /* fall through */
     case LINX_RESOURCE_CLEANUP_ENGINE:
         linx_engine_cleanup();
         /* fall through */

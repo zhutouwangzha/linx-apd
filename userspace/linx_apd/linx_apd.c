@@ -19,6 +19,7 @@
 #include "linx_event.h"
 #include "linx_process_cache.h"
 #include "linx_machine_status.h"
+#include "linx_event_processor.h"
 
 static int linx_event_loop(void)
 {
@@ -191,10 +192,35 @@ int main(int argc, char *argv[])
         *type = LINX_RESOURCE_CLEANUP_ENGINE;
     }
 
-    /* 启动事件循环，采集数据 */
-    ret = linx_event_loop();
+    /* 初始化事件处理器 */
+    linx_event_processor_config_t ep_config = {0};
+    
+    if (linx_global_config->event_processor.enabled) {
+        ep_config.fetcher_thread_count = linx_global_config->event_processor.fetcher_thread_count;
+        ep_config.matcher_thread_count = linx_global_config->event_processor.matcher_thread_count;
+        ret = linx_event_processor_init(&ep_config);
+    } else {
+        /* 使用默认配置 */
+        ret = linx_event_processor_init(NULL);
+    }
+    
     if (ret) {
-        LINX_LOG_ERROR("linx_event_loop failed");
+        LINX_LOG_ERROR("linx_event_processor_init failed");
+        goto out;
+    } else {
+        *type = LINX_RESOURCE_CLEANUP_EVENT_PROCESSOR;
+    }
+
+    /* 启动事件处理器 */
+    ret = linx_event_processor_start();
+    if (ret) {
+        LINX_LOG_ERROR("linx_event_processor_start failed");
+        goto out;
+    }
+
+    /* 等待信号退出 */
+    while (1) {
+        sleep(1);
     }
 
 out:
