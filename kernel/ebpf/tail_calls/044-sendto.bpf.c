@@ -63,8 +63,17 @@ int BPF_PROG(sendto_x, struct pt_regs *regs, long ret)
         snaplen = bytes_to_read;
     }
 
-    if (snaplen + ringbuf->payload_pos >= LINX_EVENT_MAX_SIZE) {
-        snaplen = (LINX_EVENT_MAX_SIZE - ringbuf->payload_pos - 1);
+    // 确保不会超出缓冲区边界
+    uint64_t available_space = LINX_EVENT_MAX_SIZE - ringbuf->payload_pos;
+    if (available_space <= 0) {
+        snaplen = 0;
+    } else if (snaplen >= available_space) {
+        snaplen = available_space - 1;
+    }
+    
+    // 额外的安全检查：确保snaplen不会导致越界访问
+    if (snaplen > LINX_EVENT_MAX_SIZE) {
+        snaplen = LINX_EVENT_MAX_SIZE;
     }
 
     /* data */
