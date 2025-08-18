@@ -1,7 +1,10 @@
 - rule: Detect Execution of ls Accessing /root
   desc: Detects execution of 'ls' commands accessing /root, triggering one alert per process.
   condition: >
-    evt.type = execve and proc.name = ls and evt.args contains "/root" and proc.pname = bash
+    evt.type = execve and 
+    proc.name = ls and 
+    evt.args contains "/root" and 
+    proc.pname = bash
   output: >
     Suspicious ls execution detected (time=%evt.time, process=%proc.name, type=%evt.type, cmdline=%proc.cmdline, pid=%proc.pid, ppid=%proc.ppid)
   priority: INFO

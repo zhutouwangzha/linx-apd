@@ -14,12 +14,15 @@ int BPF_PROG(sendto_e, struct pt_regs *regs, long id)
     unsigned long args[5] = {0};
     extract__network_args(args, 5, regs);
 
+    /* fd */
     int32_t socket_fd = (int32_t)args[0];
     linx_ringbuf_store_s64(ringbuf, (int64_t)socket_fd);
 
+    /* size */
     uint32_t size = (uint32_t)args[2];
     linx_ringbuf_store_u32(ringbuf, size);
 
+    /* tuple */
     if (socket_fd >= 0) {
         struct sockaddr *usrsockaddr = (struct sockaddr *)args[4];
         linx_ringbuf_store_socktuple(ringbuf, socket_fd, OUTBOUND, usrsockaddr);
@@ -48,12 +51,23 @@ int BPF_PROG(sendto_x, struct pt_regs *regs, long ret)
     unsigned long args[3] = {0};
     extract__network_args(args, 3, regs);
 
+    snaplen_args_t snaplen_args = {
+        .only_port_range = false,
+        .type = LINX_EVENT_TYPE_SENDTO_X,
+    };
+
     int64_t bytes_to_read = ret > 0 ? ret : args[2];
-    uint16_t snaplen = 128;
+    uint16_t snaplen = maps_get_snaplen();
+    apply_snaplen(regs, &snaplen, &snaplen_args);
     if ((int64_t)snaplen > bytes_to_read) {
         snaplen = bytes_to_read;
     }
 
+    if (snaplen + ringbuf->payload_pos >= LINX_EVENT_MAX_SIZE) {
+        snaplen = (LINX_EVENT_MAX_SIZE - ringbuf->payload_pos - 1);
+    }
+
+    /* data */
     unsigned long sent_data_pointer = args[1];
     linx_ringbuf_store_bytebuf(ringbuf, sent_data_pointer, snaplen, USER);
 

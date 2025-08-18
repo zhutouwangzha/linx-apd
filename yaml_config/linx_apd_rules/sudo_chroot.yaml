@@ -1,11 +1,10 @@
 - rule: Suspicious Chroot Usage After Privilege Escalation via Sudo
   desc: Detects when the 'chroot' command is executed by a non-root login user after privilege escalation (e.g., via sudo).
   condition: >
-    evt.type = execve
-    and proc.name = sudo
-    and user.name = root
-    and evt.arg.loginuid != val(user.name)
-    and (
+    evt.type = execve and 
+    proc.name = sudo and 
+    user.name = root and 
+    evt.arg.loginuid != val(user.name) and (
       proc.cmdline icontains "chroot /"
     )
   output: >

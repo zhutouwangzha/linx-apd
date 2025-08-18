@@ -1,11 +1,12 @@
 #ifndef __RINGBUF_FUNC_H__
 #define __RINGBUF_FUNC_H__
 
-#include "maps.h"
+#include "maps_get.h"
 #include "linx_event.h"
 #include "linx_event_type.h"
 #include "struct_define.h"
 #include "extract_from_kernel.h"
+#include "linx_port.h"
 
 typedef enum {
 	USER = 0,
@@ -27,6 +28,12 @@ typedef struct {
 #define FILE_PATH_MAX_DEPTH     (12)
 
 #define SAFE_ACCESS(x) ((x) & (LINX_EVENT_MAX_SIZE - 1))
+
+#define COPY_FIXDE_VALUE_TO_RINGBUF(ringbuf, value, size)                                   \
+    do {                                                                                    \
+        __builtin_memcpy(&ringbuf->data[SAFE_ACCESS(ringbuf->payload_pos)], value, size);   \
+        ringbuf->payload_pos += size;                                                       \
+    } while (0)
 
 #define PUSH_FIXDE_VALUE_TO_RINGBUF(ringbuf, value, type)                       \
     do {                                                                        \
@@ -254,15 +261,6 @@ static inline int linx_get_parent_fullpath(struct task_struct *task, char *fullp
     // return (int)linx_get_file_path(file, fullpath, LINX_PATH_MAX_SIZE);
 }
 
-static inline uint8_t maps_get_event_num_params(linx_event_type_t type)
-{
-    if (type < 0 || type >= LINX_EVENT_TYPE_MAX) {
-        return 0;
-    }
-
-    return g_event_params_table[type];
-}
-
 static inline linx_ringbuf_t *linx_ringbuf_get(void)
 {
     uint32_t cpuid = (uint32_t)bpf_get_smp_processor_id();
@@ -281,7 +279,7 @@ static inline void linx_ringbuf_load_event(linx_ringbuf_t *ringbuf, linx_event_t
     event->ppid = linx_get_ppid(task);
     event->uid = (uint64_t)((uint32_t)uid_gid);
     event->gid = (uint64_t)(uid_gid >> 32);
-    event->time = g_boot_time + bpf_ktime_get_boot_ns();
+    event->time = maps_get_boot_time() + bpf_ktime_get_boot_ns();
     event->res = (uint64_t)res;
     event->type = (uint32_t)type;
     // event->nparams = maps_get_event_num_params(type);
@@ -390,22 +388,22 @@ static inline uint16_t linx_push_charpointer(uint8_t *data,
 }
 
 static inline uint16_t linx_push_bytebuf(uint8_t *data,
-                                            uint64_t *payload_pos,
-                                            unsigned long bytebuf_pointer,
-                                            uint16_t len_to_read,
-                                            read_memory_t mem)
+                                         uint64_t *payload_pos,
+                                         unsigned long bytebuf_pointer,
+                                         uint16_t len_to_read,
+                                         read_memory_t mem)
 {
     if (mem == KERNEL) {
-        if(bpf_probe_read_kernel(&data[SAFE_ACCESS(*payload_pos)],
-                                 len_to_read,
-                                 (void *)bytebuf_pointer) != 0)
+        if (bpf_probe_read_kernel(&data[SAFE_ACCESS(*payload_pos)],
+                                  len_to_read,
+                                  (void *)bytebuf_pointer) != 0)
         {
             return 0;
         }
     } else {
-        if(bpf_probe_read_user(&data[SAFE_ACCESS(*payload_pos)],
-                               len_to_read,
-                               (void *)bytebuf_pointer) != 0)
+        if (bpf_probe_read_user(&data[SAFE_ACCESS(*payload_pos)],
+                                len_to_read,
+                                (void *)bytebuf_pointer) != 0)
         {
             return 0;
         }
@@ -456,7 +454,7 @@ static inline uint16_t linx_ringbuf_store_bytebuf(linx_ringbuf_t *ringbuf,
                                         mem);
     }
 
-    ((linx_event_t *)ringbuf->data)->params_size[ringbuf->index++] = (uint64_t)bytebuf_len;
+    PUSH_FIXED_SIZE_TO_RINGBUF(ringbuf, (uint64_t)bytebuf_len);
 
     return bytebuf_len;
 }
@@ -513,12 +511,12 @@ static inline void linx_ringbuf_store_socktuple(linx_ringbuf_t *ringbuf,
         BPF_CORE_READ_INTO(&port_remote, sk, __sk_common.skc_dport);
 
         if (port_remote == 0 && usrsockaddr != NULL) {
-            struct sockaddr_in *usrsockaddr_in = {};
+            struct sockaddr_in usrsockaddr_in = {};
             bpf_probe_read_user(&usrsockaddr_in, 
                                 bpf_core_type_size(struct sockaddr_in),
                                 (void *)usrsockaddr);
-            ipv4_remote = usrsockaddr_in->sin_addr.s_addr;
-            port_remote = usrsockaddr_in->sin_port;
+            ipv4_remote = usrsockaddr_in.sin_addr.s_addr;
+            port_remote = usrsockaddr_in.sin_port;
         }
 
         PUSH_FIXDE_VALUE_TO_RINGBUF(ringbuf, (uint8_t)socket_family, uint8_t);
@@ -535,15 +533,88 @@ static inline void linx_ringbuf_store_socktuple(linx_ringbuf_t *ringbuf,
             PUSH_FIXDE_VALUE_TO_RINGBUF(ringbuf, (uint16_t)ntohs(port_local), uint16_t);
         }
 
-        final_param_len = LINX_FAMILY_SIZE + LINX_IPV4_SIZE * 2 + LINX_PORT_SIZE * 2;
+        final_param_len = LINX_FAMILY_SIZE + ((LINX_IPV4_SIZE + LINX_PORT_SIZE) * 2);
         break;
     }
 
     case AF_INET6: {
+        struct inet_sock *inet = (struct inet_sock *)sk;
+
+        uint32_t ipv6_local[4] = {0, 0, 0, 0};
+        uint16_t port_local = 0;
+        uint32_t ipv6_remote[4] = {0, 0, 0, 0};
+        uint16_t port_remote;
+
+		BPF_CORE_READ_INTO(&ipv6_local, inet, pinet6, saddr);
+		BPF_CORE_READ_INTO(&port_local, inet, inet_sport);
+		BPF_CORE_READ_INTO(&ipv6_remote, sk, __sk_common.skc_v6_daddr);
+		BPF_CORE_READ_INTO(&port_remote, sk, __sk_common.skc_dport);
+
+		if(port_remote == 0 && usrsockaddr != NULL) {
+			struct sockaddr_in6 usrsockaddr_in6 = {};
+			bpf_probe_read_user(&usrsockaddr_in6,
+			                    bpf_core_type_size(struct sockaddr_in6),
+			                    (void *)usrsockaddr);
+			bpf_probe_read_kernel(&ipv6_remote,
+			                      sizeof(uint32_t) * 4,
+			                      usrsockaddr_in6.sin6_addr.in6_u.u6_addr32);
+			port_remote = usrsockaddr_in6.sin6_port;
+		}
+
+        PUSH_FIXDE_VALUE_TO_RINGBUF(ringbuf, (uint8_t)socket_family, uint8_t);
+
+        if (direction == OUTBOUND) {
+            COPY_FIXDE_VALUE_TO_RINGBUF(ringbuf, ipv6_local, 16);
+            PUSH_FIXDE_VALUE_TO_RINGBUF(ringbuf, (uint16_t)ntohs(port_local), uint16_t);
+            COPY_FIXDE_VALUE_TO_RINGBUF(ringbuf, ipv6_remote, 16);
+            PUSH_FIXDE_VALUE_TO_RINGBUF(ringbuf, (uint16_t)ntohs(port_remote), uint16_t);
+        } else {
+            COPY_FIXDE_VALUE_TO_RINGBUF(ringbuf, ipv6_remote, 16);
+            PUSH_FIXDE_VALUE_TO_RINGBUF(ringbuf, (uint16_t)ntohs(port_remote), uint16_t);
+            COPY_FIXDE_VALUE_TO_RINGBUF(ringbuf, ipv6_local, 16);
+            PUSH_FIXDE_VALUE_TO_RINGBUF(ringbuf, (uint16_t)ntohs(port_local), uint16_t);
+        }
+
+        final_param_len = LINX_FAMILY_SIZE + ((LINX_IPV6_SIZE + LINX_PORT_SIZE) * 2);
         break;
     }
 
     case AF_UNIX: {
+		struct unix_sock *socket_local = (struct unix_sock *)sk;
+		struct unix_sock *socket_peer = (struct unix_sock *)BPF_CORE_READ(socket_local, peer);
+		struct sockaddr_un usrsockaddr_un = {};
+		char *path = NULL;
+
+        PUSH_FIXDE_VALUE_TO_RINGBUF(ringbuf, (uint8_t)socket_family, uint8_t);
+
+        if (direction == OUTBOUND) {
+            PUSH_FIXDE_VALUE_TO_RINGBUF(ringbuf, (uint64_t)socket_peer, uint64_t);
+            PUSH_FIXDE_VALUE_TO_RINGBUF(ringbuf, (uint64_t)socket_local, uint64_t);
+
+			if(socket_peer == NULL && usrsockaddr != NULL) {
+				bpf_probe_read_user(&usrsockaddr_un,
+				                    bpf_core_type_size(struct sockaddr_un),
+				                    (void *)usrsockaddr);
+				path = usrsockaddr_un.sun_path;
+			} else {
+				path = BPF_CORE_READ(socket_peer, addr, name[0].sun_path);
+			}
+        } else {
+            PUSH_FIXDE_VALUE_TO_RINGBUF(ringbuf, (uint64_t)socket_peer, uint64_t);
+            PUSH_FIXDE_VALUE_TO_RINGBUF(ringbuf, (uint64_t)socket_local, uint64_t);
+
+            path = BPF_CORE_READ(socket_local, addr, name[0].sun_path);
+        }
+
+        if (path[0] == '\0') {
+            path++;
+        }
+
+        uint16_t written_bytes = linx_ringbuf_store_charpointer(ringbuf,  
+                                                                (unsigned long)path, 
+                                                                LINX_CHARBUF_MAX_SIZE, 
+                                                                KERNEL);
+        final_param_len = LINX_FAMILY_SIZE + (sizeof(uint64_t) * 2) + written_bytes;
         break;
     }
 
@@ -555,15 +626,12 @@ static inline void linx_ringbuf_store_socktuple(linx_ringbuf_t *ringbuf,
     PUSH_FIXED_SIZE_TO_RINGBUF(ringbuf, final_param_len);
 }
 
-static inline long extract__msghdr(struct user_msghdr *msghdr,
-                                   unsigned long msghdr_pointer) {
-	return bpf_probe_read_user((void *)msghdr,
-	                           bpf_core_type_size(struct user_msghdr),
-	                           (void *)msghdr_pointer);
-}
-
 static inline void apply_snaplen(struct pt_regs *regs, uint16_t *snaplen, const snaplen_args_t *input_args)
 {
+    if (!maps_get_do_snaplen()) {
+        return;
+    }
+
     unsigned long args[5] = {0};
 	struct sockaddr *sockaddr = NULL;
 	union {
@@ -581,16 +649,22 @@ static inline void apply_snaplen(struct pt_regs *regs, uint16_t *snaplen, const 
 		break;
     
     case LINX_EVENT_TYPE_RECVMSG_X:
-    case LINX_EVENT_TYPE_SENDMSG_X: {
+    case LINX_EVENT_TYPE_SENDMSG_X: 
+    {
         extract__network_args(args, 3, regs);
 
-        if(extract__msghdr(&msg_mh.mh, args[1]) == 0) {
-			sockaddr = (struct sockaddr *)msg_mh.mh.msg_name;
-		}
-    } break;
+		if (bpf_probe_read_user(&msg_mh.mh,
+            bpf_core_type_size(struct user_msghdr),
+            (void *)args[1]) == 0) 
+        {
+            sockaddr = (struct sockaddr *)msg_mh.mh.msg_name;
+        }
+    }
+    break;
 
 	case LINX_EVENT_TYPE_RECVMMSG_X:
-	case LINX_EVENT_TYPE_SENDMMSG_X: {
+	case LINX_EVENT_TYPE_SENDMMSG_X:
+    {
         __builtin_memcpy(args, input_args->mm_args, 3 * sizeof(unsigned long));
 
 		struct mmsghdr *mmh_ptr = (struct mmsghdr *)args[1];
@@ -599,7 +673,8 @@ static inline void apply_snaplen(struct pt_regs *regs, uint16_t *snaplen, const 
 		                       (void *)(mmh_ptr + input_args->mmsg_index)) == 0) {
 			sockaddr = (struct sockaddr *)msg_mh.mmh.msg_hdr.msg_name;
 		}
-    } break;
+    }
+    break;
 
     default:
         extract__network_args(args, 3, regs);
@@ -626,19 +701,20 @@ static inline void apply_snaplen(struct pt_regs *regs, uint16_t *snaplen, const 
     uint16_t port_remote = 0;
 
 	uint16_t socket_family = BPF_CORE_READ(sk, __sk_common.skc_family);
-	if(socket_family == AF_INET || socket_family == AF_INET6) {
+	if (socket_family == AF_INET || socket_family == AF_INET6) {
 		struct inet_sock *inet = (struct inet_sock *)sk;
 		BPF_CORE_READ_INTO(&port_local, inet, inet_sport);
 		BPF_CORE_READ_INTO(&port_remote, sk, __sk_common.skc_dport);
 		port_local = ntohs(port_local);
 		port_remote = ntohs(port_remote);
 
-		if(port_remote == 0 && sockaddr != NULL) {
+		if (port_remote == 0 && sockaddr != NULL) {
 			union {
 				struct sockaddr_in sockaddr_in;
 				struct sockaddr_in6 sockaddr_in6;
 			} saddr_in = {};
-			if(socket_family == AF_INET) {
+
+			if (socket_family == AF_INET) {
 				bpf_probe_read_user(&saddr_in.sockaddr_in,
 				                    bpf_core_type_size(struct sockaddr_in),
 				                    sockaddr);
@@ -652,7 +728,79 @@ static inline void apply_snaplen(struct pt_regs *regs, uint16_t *snaplen, const 
 		}
 	}
 
-    return;
+    uint16_t min_port = maps_get_port_range_start();
+    uint16_t max_port = maps_get_port_range_end();
+
+	if(max_port > 0 && ((port_local >= min_port && port_local <= max_port) ||
+	                    (port_remote >= min_port && port_remote <= max_port))) {
+		*snaplen = *snaplen > LINX_SNAPLEN_PORT ? *snaplen : LINX_SNAPLEN_PORT;
+		return;
+	} 
+    // else if(port_remote == maps__get_statsd_port()) {
+	// 	*snaplen = *snaplen > LINX_SNAPLEN_EXTENDED ? *snaplen : LINX_SNAPLEN_EXTENDED;
+	// 	return;
+	// } 
+    else if(port_remote == LINX_PORT_DNS) {
+		*snaplen = *snaplen > LINX_SNAPLEN_DNS_UDP ? *snaplen : LINX_SNAPLEN_DNS_UDP;
+		return;
+	}
+
+    if (input_args->only_port_range) {
+        return;
+    }
+
+	char buf[LINX_LOOKAHEAD_SIZE] = {0};
+	unsigned long data_ptr = args[1];
+	uint32_t size = (uint32_t)args[2];
+
+	if(bpf_probe_read_user((void *)&buf[0], LINX_LOOKAHEAD_SIZE, (void *)data_ptr) != 0) {
+		return;
+	}
+
+	/* MYSQL */
+	if ((port_local == LINX_PORT_MYSQL || port_remote == LINX_PORT_MYSQL) && size >= 5) {
+		if ((buf[0] == 3 || buf[1] == 3 || buf[2] == 3 || buf[3] == 3 || buf[4] == 3) ||
+		    (buf[2] == 0 && buf[3] == 0)) {
+			*snaplen = *snaplen > LINX_SNAPLEN_EXTENDED ? *snaplen : LINX_SNAPLEN_EXTENDED;
+		}
+
+		return;
+	}
+
+    /* POSTGRES */
+    if((port_local == LINX_PORT_POSTGRES || port_remote == LINX_PORT_POSTGRES) && size >= 7) {
+        if ((buf[0] == 'Q' && buf[1] == 0) || 
+            (buf[0] == 'P' && buf[1] == 0) || 
+            (buf[4] == 0 && buf[5] == 3 && buf[6] == 0) || 
+            (buf[0] == 'E' && buf[1] == 0))
+        {
+            *snaplen = *snaplen > LINX_SNAPLEN_EXTENDED ? *snaplen : LINX_SNAPLEN_EXTENDED;
+        }
+
+        return;
+    }
+
+    /* MONGODB */
+    int32_t m = *(int32_t *)(&buf[12]);
+    if ((port_local == LINX_PORT_MONGODB || port_remote == LINX_PORT_MONGODB) || 
+        (size >= 16 && (m == 1 || (m >= 2001 && m <= 2007)))) 
+    {
+        *snaplen = *snaplen > LINX_SNAPLEN_EXTENDED ? *snaplen : LINX_SNAPLEN_EXTENDED;
+        return;
+    }
+
+    /* HTTP */
+    if(size >= 5) {
+        uint32_t h = *(uint32_t *)(&buf[0]);
+        if (h == LINX_HTTP_GET || h == LINX_HTTP_POST || h == LINX_HTTP_PUT || h == LINX_HTTP_DELETE || 
+            h == LINX_HTTP_TRACE || h == LINX_HTTP_CONNECT || h == LINX_HTTP_OPTIONS || 
+            (h == LINX_HTTP_PREFIX && buf[4] == '/'))
+        {
+            *snaplen = *snaplen > LINX_SNAPLEN_EXTENDED ? *snaplen : LINX_SNAPLEN_EXTENDED;
+        }
+
+        return;
+    }
 }
 
 #endif /* __RINGBUF_FUNC_H__ */

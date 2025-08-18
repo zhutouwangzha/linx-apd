@@ -31,4 +31,6 @@ bool str_endswith_matcher(void *context);
 
 bool list_in_matcher(void *context);
 
+bool val_matcher(void *context);
+
 #endif /* __RULE_MATCH_FUNC_H__ */

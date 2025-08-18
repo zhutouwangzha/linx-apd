@@ -1,18 +1,17 @@
 - rule: Unauthorized Modification of Crontab
   desc: Detects unauthorized modification to system or user crontab entries by non-crontab processes
   condition: >
-    evt.type in (open,openat)
-    and evt.dir = <
-    and
-    (
-      fd.name startswith /etc/cron
-      or fd.name startswith /var/spool/cron/
+    evt.type in (open,openat) and 
+    evt.dir = < and (
+      fd.name startswith /etc/cron or 
+      fd.name startswith /var/spool/cron/
+    ) and 
+    evt.arg.flags contains "WR" and not 
+    proc.name = systemd and not (
+      proc.name = "crontab"
     )
-    and evt.arg.flags contains "WR"
-    and not proc.name = systemd
-    and not (proc.name = "crontab")
   output: >
-    Unauthorized crontab modification detected (user=%user.name command=%proc.cmdline file=%fd.name data=%evt.arg.data pid=%proc.pid ppid=%proc.ppid)
+    Unauthorized crontab modification detected (user=%user.name command=%proc.cmdline file=%fd.name pid=%proc.pid ppid=%proc.ppid)
   priority: WARNING
   tags:
     - system

@@ -38,7 +38,7 @@ static int bind_field_evt(void)
         FIELD_MAP(event_t, num, LINX_FIELD_TYPE_UINT64)
         FIELD_MAP(event_t, time, LINX_FIELD_TYPE_CHARBUF)
         FIELD_MAP(event_t, type, LINX_FIELD_TYPE_CHARBUF_ARRAY)
-        FIELD_MAP(event_t, args, LINX_FIELD_TYPE_CHARBUF)
+        FIELD_MAP(event_t, args, LINX_FIELD_TYPE_CHARBUF_ARRAY)
         FIELD_MAP(event_t, rawarg, LINX_FIELD_TYPE_STRUCT)
         FIELD_MAP(event_t, arg, LINX_FIELD_TYPE_STRUCT)
         FIELD_MAP(event_t, res, LINX_FIELD_TYPE_CHARBUF)
@@ -84,9 +84,17 @@ static void rich_event_clean(linx_event_type_t type)
 static void rich_event_args(linx_event_t *event)
 {
     uint64_t size = 0;
+    uint64_t args_size = event->size - LINX_EVENT_HEADER_SIZE;
     void *base = (void *)event + LINX_EVENT_HEADER_SIZE;
 
-    evt.args = (char *)base;
+    evt.args = realloc(evt.args, args_size);
+    memcpy(evt.args, base, args_size);
+
+    for (uint64_t i = 0; i < args_size; ++i) {
+        if (evt.args[i] == '\0') {
+            evt.args[i] = ' ';
+        }
+    }
 
     for (uint32_t i = 0; i < g_linx_event_table[event->type].nparams; ++i) {
         switch (g_linx_event_table[event->type].params[i].type) {
@@ -137,9 +145,25 @@ static char *parse_dirfd(linx_event_t *event, char *name, int64_t dirfd)
     return "";
 }
 
-static void rich_open_openat_enter(linx_event_t *event)
+static void rich_store_event(linx_event_t *event)
 {
-    linx_process_cache_get((pid_t)event->pid);
+    pid_t pid = (pid_t)event->pid;
+    int64_t fd = -1;
+
+    switch (event->type) {
+    case LINX_EVENT_TYPE_READ_E:
+    case LINX_EVENT_TYPE_OPENAT_E:
+        fd = *(int64_t *)linx_event_get_param(event, 0);
+        break;
+    default:
+        break;
+    }
+
+    if (fd == -1) {
+        linx_process_cache_get(pid);
+    } else {
+        linx_process_cache_get_fd(pid, fd);
+    }
 }
 
 /**
@@ -147,13 +171,19 @@ static void rich_open_openat_enter(linx_event_t *event)
  */
 static int64_t rich_open_openat_exit(linx_event_t *event)
 {
-    linx_fd_info_t *fd_info;
-    char *name, *sdir;
     int64_t dirfd;
+    char *name, *sdir;
+    bool need_update = false;
+    linx_fd_info_t *fd_info;
 
-    fd_info = calloc(1, sizeof(linx_fd_info_t));
+    fd_info = linx_process_cache_get_fd((pid_t)event->pid, (int64_t)event->res);
     if (!fd_info) {
-        return -1;
+        fd_info = calloc(1, sizeof(linx_fd_info_t));
+        if (!fd_info) {
+            return -1;
+        }
+
+        need_update = true;
     }
 
     if (event->type == LINX_EVENT_TYPE_OPENAT_X) {
@@ -163,8 +193,6 @@ static int64_t rich_open_openat_exit(linx_event_t *event)
         sdir = parse_dirfd(event, name, dirfd);
     }
 
-    fd_info->num = (int64_t)event->res;
-
     snprintf(fd_info->filename, sizeof(fd_info->filename), "%s", name);
     snprintf(fd_info->directory, sizeof(fd_info->directory), "%s", sdir);
     if (strlen(sdir)) {
@@ -173,7 +201,10 @@ static int64_t rich_open_openat_exit(linx_event_t *event)
         snprintf(fd_info->name, sizeof(fd_info->name), "%s", fd_info->filename);
     }
 
-    linx_process_cache_update_fd((pid_t)event->pid, fd_info);
+    if (need_update) {
+        fd_info->num = (int64_t)event->res;
+        linx_process_cache_update_fd((pid_t)event->pid, fd_info);
+    }
 
     return (int64_t)event->res;
 }
@@ -197,8 +228,24 @@ static void rich_execve_exit(linx_event_t *event)
 
     memcpy(info->name, event->comm, strlen(event->comm));
     memcpy(info->cmdline, event->cmdline, strlen(event->cmdline));
+    memcpy(info->args, event->cmdline + strlen(event->comm), sizeof(info->args));
 
     linx_process_cache_update(info);
+}
+
+static void rich_rw_exit(linx_event_t *event)
+{
+    int64_t fd;
+    linx_fd_info_t *fd_info;
+
+    if (event->type != LINX_EVENT_TYPE_SENDTO_X) {
+        fd = *(int64_t *)linx_event_get_param(event, 2);
+    }
+
+    fd_info = linx_process_cache_get_fd((pid_t)event->pid, fd);
+    if (!fd_info) {
+        return;
+    }
 }
 
 int linx_event_rich_init(void)
@@ -260,9 +307,12 @@ int linx_event_rich(linx_event_t *event)
      * 根据不同的事件，进行不同的上下文丰富
     */
     switch (event->type) {
+        case LINX_EVENT_TYPE_SENDTO_E:
+
+        case LINX_EVENT_TYPE_READ_E:
         case LINX_EVENT_TYPE_OPEN_E:
         case LINX_EVENT_TYPE_OPENAT_E:
-            rich_open_openat_enter(event);
+            rich_store_event(event);
             break;
         case LINX_EVENT_TYPE_OPEN_X:
         case LINX_EVENT_TYPE_OPENAT_X:
@@ -270,6 +320,11 @@ int linx_event_rich(linx_event_t *event)
             break;
         case LINX_EVENT_TYPE_EXECVE_X:
             rich_execve_exit(event);
+            break;
+        case LINX_EVENT_TYPE_READ_X:
+        case LINX_EVENT_TYPE_WRITE_X:
+        case LINX_EVENT_TYPE_SENDTO_X:
+            rich_rw_exit(event);
             break;
         default:
             break;

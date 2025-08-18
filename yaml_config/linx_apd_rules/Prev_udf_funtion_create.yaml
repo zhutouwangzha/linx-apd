@@ -1,15 +1,14 @@
 - rule: Detect MySQL UDF Plugin Injection Attempt
   desc: Detects attempts to create a User Defined Function (UDF) using a .so plugin in MySQL, which is often used for privilege escalation.
   condition: >
-    proc.name = "mysqld"
-    and evt.dir = "<" 
-    and evt.type = 'recvfrom' 
-    and evt.arg.data icontains "create function"
-    and (
-    evt.arg.data icontains "sys_eval"
-    or evt.arg.data icontains "sys_exec"
-    )
-    and evt.arg.data icontains ".so"
+    proc.name = "mysqld" and 
+    evt.dir = "<" and 
+    evt.type = 'recvfrom' and 
+    evt.arg.data icontains "create function" and (
+      evt.arg.data icontains "sys_eval" or 
+      evt.arg.data icontains "sys_exec"
+    ) and 
+    evt.arg.data icontains ".so"
   output: >
     MySQL UDF plugin injection detected! (pid=%proc.pid ppid=%proc.ppid user=%user.name protocol=%fd.typechar  query=%evt.arg.data)
   priority: WARNING

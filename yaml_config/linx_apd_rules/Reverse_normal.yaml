@@ -7,14 +7,21 @@
     macro. Tuning can be performed similarly to existing detections based on process lineage or container images,
     and/or it can be limited to interactive tty (tty != 0).
   condition: >
-    (evt.type in (dup, dup2, dup3) and evt.dir = <)
-    and fd.net != "127.0.0.0/8" and not (fd.snet in (10.0.0.0/8))
-    and not evt.num = 0
-    and not (proc.name in (perl, python, python3, php, java))
-    and (fd.l4proto = tcp or fd.l4proto = udp)
-    and evt.rawres in (0)
-    and fd.lport != 22
-    and fd.type in ("ipv4", "ipv6")
+    ( evt.type in (dup, dup2, dup3) and 
+      evt.dir = <
+    ) and 
+    fd.net != "127.0.0.0/8" and not (
+      fd.snet in (10.0.0.0/8)
+    ) and not 
+    evt.num = 0 and not (
+      proc.name in (perl, python, python3, php, java)
+    ) and (
+      fd.l4proto = tcp or 
+      fd.l4proto = udp
+    ) and 
+    evt.rawres in (0) and 
+    fd.lport != 22 and 
+    fd.type in ("ipv4", "ipv6")
 
   output: Redirect stdout/stdin to network connection (pid=%proc.pid ppid=%proc.ppid gparent=%proc.aname[2] ggparent=%proc.aname[3] gggparent=%proc.aname[4] fd.sip=%fd.sip connection=%fd.name lport=%fd.lport rport=%fd.rport fd_type=%fd.type fd_proto=%fd.l4proto evt_type=%evt.type user=%user.name user_uid=%user.uid user_loginuid=%user.loginuid process=%proc.name proc_exepath=%proc.exepath parent=%proc.pname command=%proc.cmdline terminal=%proc.tty proc.stdin=%proc.stdin.name proc.stdout=%proc.stdout.name)
   priority: EMERGENCY

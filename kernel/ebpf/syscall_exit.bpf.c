@@ -11,7 +11,7 @@ int BPF_PROG(sys_exit, struct pt_regs *regs, long ret)
 
     if (check_pid_need_filtered(pid) ||
         check_comm_need_filtered(comm) ||
-        check_drop_mode()) 
+        maps_get_drop_mode()) 
     {
         return 0;
     }
@@ -20,7 +20,7 @@ int BPF_PROG(sys_exit, struct pt_regs *regs, long ret)
         return 0;
     }
 
-    if (check_drop_failed() && ret < 0) {
+    if (maps_get_drop_failed() && ret < 0) {
         return 0;
     }
 

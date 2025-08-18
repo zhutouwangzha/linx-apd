@@ -1,20 +1,17 @@
 - rule: Suspicious Cat Command with Login UID Mismatch
   desc: Detects when the 'cat' command is run by a non-login user (e.g., via privilege escalation) to read sensitive files.
   condition: >
-    evt.type = execve
-    and proc.name = cat
-    and user.name = root
-    and
-    (
-      evt.arg.pgid = cat
-      or evt.arg.pgid = bash  
-    )
-    and evt.arg.loginuid != val(user.name)
-    and not(
-    proc.exepath startswith /usr/bin/
-    or proc.exepath startswith /usr/sbin/
-    )
-    and proc.cmdline contains "shadow"
+    evt.type = execve and 
+    proc.name = cat and 
+    user.name = root and (
+      evt.arg.pgid = cat or 
+      evt.arg.pgid = bash  
+    ) and 
+    evt.arg.loginuid != val(user.name) and not (
+      proc.exepath startswith /usr/bin/ or 
+      proc.exepath startswith /usr/sbin/
+    ) and 
+    proc.cmdline contains "shadow"
   output: >
     Suspicious 'cat' command executed by non-root login user to access sensitive file (pid=%proc.pid ppid=%proc.ppid loginuid=%evt.arg.loginuid user=%user.name command=%proc.cmdline file=%fd.name exepath=%proc.exepath)
   priority: EMERGENCY

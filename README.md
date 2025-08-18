@@ -1475,3 +1475,8 @@ int linx_yaml_get_bool(linx_yaml_node_t *root, const char *path, int default_val
 | dup2     |          |          |
 | dup3     |          |          |
 
+
+proc.pname proc.aname 等等字段目前没有很好的办法做
+因为其要采集的是父进程或特定祖先进程的数据
+
+内核能读很多出来，但是在输出时，使用了固定的buffer长度，这样就导致输出时被截断了，需要解决

@@ -177,7 +177,7 @@
     },
     "sendto": {
       "syscall_id": 44,
-      "interesting": 0
+      "interesting": 1
     },
     "recvfrom": {
       "syscall_id": 45,
@@ -997,7 +997,7 @@
     },
     "openat": {
       "syscall_id": 257,
-      "interesting": 1
+      "interesting": 0
     },
     "mkdirat": {
       "syscall_id": 258,

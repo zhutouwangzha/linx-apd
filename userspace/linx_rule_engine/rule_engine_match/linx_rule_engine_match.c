@@ -16,9 +16,12 @@ static int find_field_name_and_value(ast_node_t *root, char **name, void **ctx)
     str_context_t **str_ctx;
     list_context_t **list_ctx;
 
+    /**
+     * 右节点为空的情况是可以接受的
+     * 比如在使用 val() 时
+     */
     if (root == NULL || 
-        root->data.binary.left == NULL || 
-        root->data.binary.right == NULL)
+        root->data.binary.left == NULL)
     {
         *name = NULL;
         return -1;
@@ -37,6 +40,10 @@ static int find_field_name_and_value(ast_node_t *root, char **name, void **ctx)
 
     *name = left->data.field.name;
 
+    if (!right) {
+        return 0;
+    }
+
     switch (right->type) {
     case AST_NODE_TYPE_INT:
         num_ctx = (num_context_t **)ctx;
@@ -54,13 +61,13 @@ static int find_field_name_and_value(ast_node_t *root, char **name, void **ctx)
     case AST_NODE_TYPE_LIST:
         list_ctx = (list_context_t **)ctx;
         (*list_ctx)->list_count = right->data.list.count;
-        (*list_ctx)->list = (char **)malloc(right->data.list.count * sizeof(char *));
+        (*list_ctx)->list = (char **)calloc(1, right->data.list.count * sizeof(char *));
         if (!((*list_ctx)->list)) {
             *name = NULL;
             return -1;
         }
 
-        (*list_ctx)->list_len = (size_t *)malloc(right->data.list.count * sizeof(size_t));
+        (*list_ctx)->list_len = (size_t *)calloc(1, right->data.list.count * sizeof(size_t));
         if (!((*list_ctx)->list_len)) {
             free((*list_ctx)->list);
             (*list_ctx)->list = NULL;
@@ -106,19 +113,18 @@ static linx_rule_match_t *compile_binary_bool_node(ast_node_t *node)
         return NULL;
     }
 
-    match = malloc(sizeof(linx_rule_match_t));
+    match = calloc(1, sizeof(linx_rule_match_t));
     if (match == NULL) {
         return NULL;
     }
 
-    context = malloc(sizeof(logic_context_t));
+    context = calloc(1, sizeof(logic_context_t));
     if (context == NULL) {
         return NULL;
     }
 
     context->left = left;
     context->right = right;
-    match->context = context;
 
     switch (node->data.binary.op.bool_op) {
     case BINARY_BOOL_OP_OR:
@@ -131,6 +137,9 @@ static linx_rule_match_t *compile_binary_bool_node(ast_node_t *node)
         break;
     }
 
+    match->context = context;
+    match->type = MATCH_CONTEXT_LOGIC;
+
     return match;
 }
 
@@ -141,12 +150,12 @@ static linx_rule_match_t *compile_binary_num_node(ast_node_t *node)
     linx_rule_match_t *match;
     num_context_t *context;
 
-    match = malloc(sizeof(linx_rule_match_t));
+    match = calloc(1, sizeof(linx_rule_match_t));
     if (match == NULL) {
         return NULL;
     }
 
-    context = malloc(sizeof(num_context_t));
+    context = calloc(1, sizeof(num_context_t));
     if (context == NULL) {
         return NULL;
     }
@@ -176,6 +185,7 @@ static linx_rule_match_t *compile_binary_num_node(ast_node_t *node)
     }
 
     match->context = context;
+    match->type = MATCH_CONTEXT_NUM;
 
     return match;
 }
@@ -187,12 +197,12 @@ static linx_rule_match_t *compile_binary_str_node(ast_node_t *node)
     linx_rule_match_t *match;
     str_context_t *context;
 
-    match = malloc(sizeof(linx_rule_match_t));
+    match = calloc(1, sizeof(linx_rule_match_t));
     if (match == NULL) {
         return NULL;
     }
 
-    context = malloc(sizeof(num_context_t));
+    context = calloc(1, sizeof(num_context_t));
     if (context == NULL) {
         free(match);
         return NULL;
@@ -241,6 +251,7 @@ static linx_rule_match_t *compile_binary_str_node(ast_node_t *node)
     }
 
     match->context = context;
+    match->type = MATCH_CONTEXT_STR;
 
     return match;
 }
@@ -252,12 +263,12 @@ static linx_rule_match_t *compile_binary_list_node(ast_node_t *node)
     linx_rule_match_t *match;
     num_context_t *context;
 
-    match = malloc(sizeof(linx_rule_match_t));
+    match = calloc(1, sizeof(linx_rule_match_t));
     if (match == NULL) {
         return NULL;
     }
 
-    context = malloc(sizeof(num_context_t));
+    context = calloc(1, sizeof(num_context_t));
     if (context == NULL) {
         free(match);
         return NULL;
@@ -283,6 +294,7 @@ static linx_rule_match_t *compile_binary_list_node(ast_node_t *node)
     }
 
     match->context = context;
+    match->type = MATCH_CONTEXT_LIST;
 
     return match;
 }
@@ -292,12 +304,12 @@ static linx_rule_match_t *compile_unary_node(ast_node_t *node)
     linx_rule_match_t *match;
     unary_context_t *context;
 
-    match = malloc(sizeof(linx_rule_match_t));
+    match = calloc(1, sizeof(linx_rule_match_t));
     if (match == NULL) {
         return NULL;
     }
 
-    context = malloc(sizeof(num_context_t));
+    context = calloc(1, sizeof(num_context_t));
     if (context == NULL) {
         free(match);
         return NULL;
@@ -321,16 +333,58 @@ static linx_rule_match_t *compile_unary_node(ast_node_t *node)
     }
 
     match->context = context;
+    match->type = MATCH_CONTEXT_UNARY;
+
+    return match;
+}
+
+static linx_rule_match_t *compile_val_node(ast_node_t *node)
+{
+    int ret;
+    char *field_name;
+    linx_rule_match_t *match;
+    val_context_t *context;
+
+    match = calloc(1, sizeof(linx_rule_match_t));
+    if (match == NULL) {
+        return NULL;
+    }
+
+    context = calloc(1, sizeof(val_context_t));
+    if (context == NULL) {
+        free(match);
+        return NULL;
+    }
+
+    ret = find_field_name_and_value(node, &field_name, NULL);
+    if (ret) {
+        LINX_LOG_ERROR("Failed to find field name");
+    }
+
+    context->field = linx_hash_map_get_field_by_path(field_name);
+
+    match->func = val_matcher;
+    match->context = context;
+    match->type = MATCH_CONTEXT_VAL;
 
     return match;
 }
 
 static linx_rule_match_t *compile_ast(ast_node_t *ast)
 {
-    linx_rule_match_t *match = NULL;
+    linx_rule_match_t *match = NULL , *val_match = NULL;
 
     if (ast == NULL) {
         return match;
+    }
+
+    if ((ast->type == AST_NODE_TYPE_BIN_NUM_OP || 
+        ast->type == AST_NODE_TYPE_BIN_STR_OP )&&
+        ast->data.binary.right != NULL &&
+        ((ast_node_t *)ast->data.binary.right)->type == 
+            AST_NODE_TYPE_FIELD_TRANSFORMER_VAL)
+    {
+        val_match = compile_val_node(ast->data.binary.right);
     }
 
     switch (ast->type) {
@@ -352,6 +406,11 @@ static linx_rule_match_t *compile_ast(ast_node_t *ast)
     default:
         match = NULL;
         break;
+    }
+
+    if (val_match) {
+        ((val_context_t *)val_match->context)->operand = match;
+        match = val_match;
     }
 
     return match;
@@ -379,6 +438,7 @@ void linx_rule_engine_match_destroy(linx_rule_match_t *match)
     list_context_t *l_context;
     unary_context_t *u_context;
     logic_context_t *o_context;
+    val_context_t *v_context;
 
     if (!match) {
         return;
@@ -440,10 +500,21 @@ void linx_rule_engine_match_destroy(linx_rule_match_t *match)
             }
 
             if (o_context->right) {
-                linx_rule_engine_match_destroy(o_context->left);
+                linx_rule_engine_match_destroy(o_context->right);
             }
 
             free(o_context);
+            match->context = NULL;
+        }
+        break;
+    case MATCH_CONTEXT_VAL:
+        v_context = (val_context_t *)match->context;
+        if (v_context) {
+            if (v_context->operand) {
+                linx_rule_engine_match_destroy(v_context->operand);
+            }
+
+            free(v_context);
             match->context = NULL;
         }
         break;

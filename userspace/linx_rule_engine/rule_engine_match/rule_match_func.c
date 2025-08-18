@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdio.h>
 #include <ctype.h>
 
 #include "rule_match_func.h"
@@ -7,6 +8,8 @@
 #include "output_match_func.h"
 #include "linx_field_type.h"
 #include "linx_process_cache.h"
+#include "linx_event_table.h"
+#include "linx_name_value.h"
 
 static void *matcher_get_value_ptr(field_result_t *field, linx_field_type_t *type)
 {
@@ -17,6 +20,52 @@ static void *matcher_get_value_ptr(field_result_t *field, linx_field_type_t *typ
     }
 
     return ptr;
+}
+
+static int matcher_get_real_value_ptr(linx_field_type_t type, char **value, 
+                                      char *value_ptr, char *buffer, size_t buf_size, 
+                                      bool defalut_process, field_result_t *field)
+{
+    int ret = 0;
+    uint32_t flags;
+    size_t bytes_write = 0;
+    linx_name_value_t *name_value;
+
+    switch (type) {
+    case LINX_FIELD_TYPE_CHARBUF:
+    case LINX_FIELD_TYPE_UID:
+    case LINX_FIELD_TYPE_PID:
+    case LINX_FIELD_TYPE_BYTEBUF:
+        *value = value_ptr;
+        break;
+    case LINX_FIELD_TYPE_CHARBUF_ARRAY:
+        *value = (char *)(*(uint64_t *)value_ptr);
+        break;
+    case LINX_FIELD_TYPE_FLAGS32:
+        name_value = (linx_name_value_t *)(
+            g_linx_event_table[*field->event_type].params[field->arg_index].info);
+        if (name_value) {
+            flags =  *(uint32_t *)value_ptr;
+
+            for (int i = 0; name_value[i].name; ++i) {
+                if (flags & name_value[i].value) {
+                    bytes_write += snprintf(buffer + bytes_write, buf_size - bytes_write, 
+                                            "%s", name_value[i].name);
+                }
+            }
+        }
+
+        *value = buffer;
+        break;
+    default:
+        if (defalut_process) {
+            ret = format_field_value(field, buffer, buf_size, 0);
+            *value = buffer;
+        }
+        break;
+    }
+
+    return ret;
 }
 
 static char *linx_str_lower(char *str)
@@ -136,33 +185,21 @@ bool num_le_matcher(void *context)
 bool str_assign_matcher(void *context)
 {
     int ret;
-    linx_field_type_t type;
-    str_context_t *ctx = (str_context_t *)context;
     char *value;
     char buffer[256] = {0};
+    linx_field_type_t type;
+    str_context_t *ctx = (str_context_t *)context;
 
     char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     if (!value_ptr) {
         return false;
     }
 
-    switch (type) {
-    case LINX_FIELD_TYPE_CHARBUF:
-    case LINX_FIELD_TYPE_UID:
-    case LINX_FIELD_TYPE_PID:
-        value = value_ptr;
-        break;
-    case LINX_FIELD_TYPE_CHARBUF_ARRAY:
-        value = (char *)(*(uint64_t *)value_ptr);
-        break;
-    default:
-        ret = format_field_value(&ctx->field, buffer, sizeof(buffer), 0);
-        if (ret <= 0) {
-            return false;
-        }
-
-        value = buffer;
-        break;
+    if (matcher_get_real_value_ptr(type, &value, value_ptr, 
+                                   buffer, sizeof(buffer), true,
+                                   &ctx->field)) 
+    {
+        return false;
     }
 
     if (strlen(value) != ctx->str_len) {
@@ -181,26 +218,22 @@ bool str_ne_matcher(void *context)
 
 bool str_contains_matcher(void *context)
 {
-    linx_field_type_t type;
-    str_context_t *ctx = (str_context_t *)context;
     char *value;
     const char *result;
+    char buffer[256] = {0};
+    linx_field_type_t type;
+    str_context_t *ctx = (str_context_t *)context;
 
     char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     if (!value_ptr) {
         return false;
     }
 
-    switch (type) {
-    case LINX_FIELD_TYPE_CHARBUF:
-        value = value_ptr;
-        break;
-    case LINX_FIELD_TYPE_CHARBUF_ARRAY:
-        value = (char *)(*(uint64_t *)value_ptr);
-        break;
-    default:
+    if (matcher_get_real_value_ptr(type, &value, value_ptr, 
+        buffer, sizeof(buffer), true,
+        &ctx->field)) 
+    {
         return false;
-        break;
     }
 
     result = strstr(value, ctx->str);
@@ -210,26 +243,23 @@ bool str_contains_matcher(void *context)
 
 bool str_icontains_matcher(void *context)
 {
+    char *value;
+    const char *result;
+    char *lower1, *lower2;
+    char buffer[256] = {0};
     linx_field_type_t type;
     str_context_t *ctx = (str_context_t *)context;
-    char *value, *lower1, *lower2;
-    const char *result;
 
     char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     if (!value_ptr) {
         return false;
     }
 
-    switch (type) {
-    case LINX_FIELD_TYPE_CHARBUF:
-        value = value_ptr;
-        break;
-    case LINX_FIELD_TYPE_CHARBUF_ARRAY:
-        value = (char *)(*(uint64_t *)value_ptr);
-        break;
-    default:
+    if (matcher_get_real_value_ptr(type, &value, value_ptr, 
+        buffer, sizeof(buffer), true,
+        &ctx->field)) 
+    {
         return false;
-        break;
     }
 
     lower1 = linx_str_lower(value);
@@ -249,25 +279,21 @@ bool str_icontains_matcher(void *context)
 
 bool str_startswith_matcher(void *context)
 {
+    char *value;
+    char buffer[256] = {0};
     linx_field_type_t type;
     str_context_t *ctx = (str_context_t *)context;
-    char *value;
 
     char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     if (!value_ptr) {
         return false;
     }
 
-    switch (type) {
-    case LINX_FIELD_TYPE_CHARBUF:
-        value = value_ptr;
-        break;
-    case LINX_FIELD_TYPE_CHARBUF_ARRAY:
-        value = (char *)(*(uint64_t *)value_ptr);
-        break;
-    default:
+    if (matcher_get_real_value_ptr(type, &value, value_ptr, 
+        buffer, sizeof(buffer), true,
+        &ctx->field)) 
+    {
         return false;
-        break;
     }
 
     if (ctx->str_len > strlen(value)) {
@@ -279,26 +305,22 @@ bool str_startswith_matcher(void *context)
 
 bool str_endswith_matcher(void *context)
 {
-    linx_field_type_t type;
-    str_context_t *ctx = (str_context_t *)context;
     char *value;
     size_t value_len;
+    char buffer[256] = {0};
+    linx_field_type_t type;
+    str_context_t *ctx = (str_context_t *)context;
 
     char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     if (!value_ptr) {
         return false;
     }
 
-    switch (type) {
-    case LINX_FIELD_TYPE_CHARBUF:
-        value = value_ptr;
-        break;
-    case LINX_FIELD_TYPE_CHARBUF_ARRAY:
-        value = (char *)(*(uint64_t *)value_ptr);
-        break;
-    default:
+    if (matcher_get_real_value_ptr(type, &value, value_ptr, 
+        buffer, sizeof(buffer), true,
+        &ctx->field)) 
+    {
         return false;
-        break;
     }
 
     value_len = strlen(value);
@@ -314,33 +336,22 @@ bool str_endswith_matcher(void *context)
 
 bool list_in_matcher(void *context)
 {
-    int ret;
-    linx_field_type_t type;
-    list_context_t *ctx = (list_context_t *)context;
     char *value;
     size_t value_len;
     char buffer[256] = {0};
+    linx_field_type_t type;
+    list_context_t *ctx = (list_context_t *)context;
 
     char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
     if (!value_ptr) {
         return false;
     }
 
-    switch (type) {
-    case LINX_FIELD_TYPE_CHARBUF:
-        value = value_ptr;
-        break;
-    case LINX_FIELD_TYPE_CHARBUF_ARRAY:
-        value = (char *)(*(uint64_t *)value_ptr);
-        break;
-    default:
-        ret = format_field_value(&ctx->field, buffer, sizeof(buffer), 0);
-        if (ret <= 0) {
-            return false;
-        }
-
-        value = buffer;
-        break;
+    if (matcher_get_real_value_ptr(type, &value, value_ptr, 
+        buffer, sizeof(buffer), true,
+        &ctx->field)) 
+    {
+        return false;
     }
 
     value_len = strlen(value);
@@ -356,4 +367,61 @@ bool list_in_matcher(void *context)
     }
 
     return false;
+}
+
+bool val_matcher(void *context)
+{
+    str_context_t *str_ctx;
+    linx_field_type_t type;
+    bool result, need_free = false;
+    char *value, *value_ptr, *buffer;
+    val_context_t *ctx = (val_context_t *)context;
+    linx_rule_match_t *op = (linx_rule_match_t *)ctx->operand;
+
+    value_ptr = matcher_get_value_ptr(&ctx->field, &type);
+    if (!value_ptr) {
+        return false;
+    }
+
+    switch (op->type) {
+    case MATCH_CONTEXT_NUM:
+        num_context_t *num_ctx = (num_context_t *)op->context;
+        if (type == LINX_FIELD_TYPE_DOUBLE) {
+            num_ctx->number.double_val = (double)(*(uint64_t *)value_ptr);
+        } else {
+            num_ctx->number.int_val = (long long)(*(uint64_t *)value_ptr);
+        }
+        break;
+    case MATCH_CONTEXT_STR:
+        str_ctx = (str_context_t *)op->context;
+
+        buffer = malloc(256);
+        if (!buffer) {
+            return false;
+        }
+
+        if (matcher_get_real_value_ptr(type, &value, value_ptr,
+                                       buffer, 256, true,
+                                       &ctx->field))
+        {
+            free(buffer);
+            return false;
+        }
+
+        need_free = true;
+        str_ctx->str = value;
+        str_ctx->str_len = strlen(value);
+        break;
+    default:
+        break;
+    }
+
+    result =  op->func(op->context);
+
+    if (need_free) {
+        free(buffer);
+        str_ctx->str = NULL;
+    }
+
+    return result;
 }

@@ -1,16 +1,12 @@
-- macro: is_whitelisted_ssh_ip
-  condition: >
-    evt.args icontains "addr=172.30.103.52"
-
 - rule: SSH Login Success From Untrusted IP
   desc: Detects successful SSH login via PAM authentication from an untrusted IP address.
   condition: >
-    evt.type = sendto
-    and proc.name = "sshd"
-    and evt.args icontains "PAM"
-    and evt.args icontains "authentication"
-    and evt.args icontains "res=success"
-    and not is_whitelisted_ssh_ip
+    evt.type = sendto and 
+    proc.name = "sshd" and 
+    evt.args icontains "PAM" and 
+    evt.args icontains "authentication" and 
+    evt.args icontains "res=success" and not 
+    evt.args icontains "addr=172.30.103.52"
   output: >
     SSH login success from untrusted IP %fd.sip (pid=%proc.pid ppid=%proc.ppid user=%user.name command=%proc.cmdline location=%evt.args)
   priority:

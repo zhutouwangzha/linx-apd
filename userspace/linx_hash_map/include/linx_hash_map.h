@@ -27,6 +27,7 @@ typedef struct {
     char *table_name;
     char *field_name;
     char *arg;
+    int32_t arg_index;          /* 标识参数的下标，即在第几位 */
     uint64_t *event_type;       /* 默认指向一个全局的事件类型地址，标识每次事件的类型 */
 } field_result_t;
 
@@ -102,7 +103,7 @@ field_result_t linx_hash_map_get_field(const char *table_name, const char *field
 
 field_result_t linx_hash_map_get_field_by_path(char *path);
 
-void *linx_hash_map_get_value_ptr(const field_result_t *field, linx_field_type_t *type);
+void *linx_hash_map_get_value_ptr(field_result_t *field, linx_field_type_t *type);
 
 int linx_hash_map_update_table_base(const char *table_name, void *base_addr);
 

@@ -62,6 +62,4 @@ void linx_resource_cleanup(void)
     default:
         break;
     }
-
-    exit(0);
 }

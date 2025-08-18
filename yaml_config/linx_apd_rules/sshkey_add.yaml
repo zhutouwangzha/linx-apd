@@ -1,15 +1,13 @@
 - rule: Unauthorized Modification of authorized_keys File
   desc: Detects attempts to write or append to .ssh/authorized_keys files, which may indicate persistence or lateral movement.
   condition: >
-    evt.type in (open,openat)
-    and evt.dir = < 
-    and (
-    fd.name= "authorized_keys" or fd.directory contains .ssh
-    )
-    and evt.arg.flags contains "WR"
-    and not proc.name = systemd
+    evt.type in (open,openat) and 
+    evt.dir = < and (
+      fd.name= "authorized_keys" or fd.directory contains .ssh
+    ) and evt.arg.flags contains "WR" and not 
+    proc.name = systemd
   output: >
-    Unauthorized modification of SSH authorized_keys file (pid=%proc.pid ppid=%proc.ppid user=%user.name command=%proc.cmdline file=%fd.name data=%evt.arg.data)
+    Unauthorized modification of SSH authorized_keys file (pid=%proc.pid ppid=%proc.ppid user=%user.name command=%proc.cmdline file=%fd.name)
   priority: WARNING
   tags:
     - system

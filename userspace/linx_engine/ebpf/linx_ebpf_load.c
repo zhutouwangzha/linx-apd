@@ -3,11 +3,14 @@
 #include "linx_ebpf_common.h"
 #include "linx_event_table.h"
 #include "linx_config.h"
+
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
     (void)level;
 
-    LINX_LOG_DEBUG_V(format, args);
+    // LINX_LOG_DEBUG_V(format, args);
+    vfprintf(stderr, format, args);
+
     return 0;
 }
 

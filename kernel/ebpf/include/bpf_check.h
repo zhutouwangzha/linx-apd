@@ -1,20 +1,20 @@
 #ifndef __BPF_CHECK_H__
 #define __BPF_CHECK_H__
 
-#include "maps.h"
+#include "maps_get.h"
 
-static inline int check_pid_need_filtered(uint32_t pid)
+static inline bool check_pid_need_filtered(uint32_t pid)
 {
     for (int i = 0; i < LINX_BPF_FILTER_PID_MAX_SIZE && g_filter_pids[i]; ++i) {
         if (pid == g_filter_pids[i]) {
-            return -1;
+            return true;
         }
     }
 
-    return 0;
+    return false;
 }
 
-static inline int check_comm_need_filtered(const char *comm)
+static inline bool check_comm_need_filtered(const char *comm)
 {
     int flag = 0;
 
@@ -33,21 +33,11 @@ static inline int check_comm_need_filtered(const char *comm)
         }
 
         if (flag) {
-            return -1;
+            return true;
         }
     }
 
-    return 0;
-}
-
-static inline int check_drop_mode(void)
-{
-    return g_drop_mode;
-}
-
-static inline int check_drop_failed(void)
-{
-    return g_drop_failed;
+    return false;
 }
 
 static inline int check_interesting_syscall(uint32_t syscall_id)

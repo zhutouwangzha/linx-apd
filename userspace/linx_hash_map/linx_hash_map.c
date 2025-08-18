@@ -234,7 +234,7 @@ field_result_t linx_hash_map_get_field_by_path(char *path)
     return result;
 }
 
-void *linx_hash_map_get_value_ptr(const field_result_t *field, linx_field_type_t *type)
+void *linx_hash_map_get_value_ptr(field_result_t *field, linx_field_type_t *type)
 {
     void *base_addr, *ptr;
 
@@ -261,11 +261,13 @@ void *linx_hash_map_get_value_ptr(const field_result_t *field, linx_field_type_t
         }
 
         if (index >= g_linx_event_table[*field->event_type].nparams) {
+            field->arg_index = -1;
             return NULL;
         }
 
         ptr = (void *)((char *)base_addr + field->offset + index * sizeof(void *));
         *type = g_linx_event_table[*field->event_type].params[index].type;
+        field->arg_index = index;
     } else {
         ptr = (void *)((char *)base_addr + field->offset);
         *type = field->type;

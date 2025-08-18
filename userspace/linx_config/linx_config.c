@@ -69,7 +69,7 @@ static int linx_config_fill_interest_syscall_table(char *file_path)
         }
 
         linx_global_config->engine.data.ebpf.interest_syscall_table[i] = 
-            interest->valueint;
+            (bool)interest->valueint;
     }
 
     cJSON_Delete(json_config);
@@ -181,7 +181,8 @@ int linx_config_load(const char *config_file)
     if (ret) {
         return ret;
     }
-
+    
+    linx_global_config->snaplen = (uint32_t)linx_yaml_get_int(root, "snaplen", 80);
     
     linx_global_config->log_config.output = strdup(linx_yaml_get_string(root, "log.output", "stderr"));
     linx_global_config->log_config.log_level = strdup(linx_yaml_get_string(root, "log.level", "ERROR"));

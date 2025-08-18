@@ -18,6 +18,8 @@ log:
   output: stderr
   level: ERROR
 
+snaplen: 80
+
 engine:
   kind: ebpf
   kmod:

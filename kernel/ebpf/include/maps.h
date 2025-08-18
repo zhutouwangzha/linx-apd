@@ -22,27 +22,14 @@ __weak char g_filter_comms[LINX_BPF_FILTER_COMM_MAX_SIZE][LINX_COMM_MAX_SIZE];
 __weak uint8_t g_interesting_syscalls_table[LINX_SYSCALL_ID_MAX];
 
 /**
- * 表示当前事件需要采集的参数个数
-*/
-__weak uint8_t g_event_params_table[LINX_SYSCALL_ID_MAX];
-
-/**
- * 应用层获取到的启动时间
- * 该时间+bpf中获取的时间=系统时间
+ * ebpf 的整体配置
  */
-__weak uint64_t g_boot_time;
-
-/**
- * 丢弃模式的总体控制开关
- * 为1时，放弃采集所有的系统调用
- */
-__weak uint8_t g_drop_mode;
-
-/**
- * 是否放弃采集失败的系统调用
- * 为1时，放弃采集
- */
-__weak uint8_t g_drop_failed;
+struct {
+	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, uint32_t);
+	__type(value, linx_capture_set_t);
+} g_capture_set __weak SEC(".maps");
 
 /**
  * 系统调用退出的尾部调用表

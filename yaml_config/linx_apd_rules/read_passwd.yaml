@@ -1,15 +1,17 @@
 - rule: Passwd File Access by File Open
   desc: Detect direct file open of sensitive files by known read tools
   condition: >
-    evt.type in (open,openat) and
-    (proc.cmdline contains "passwd" or proc.cmdline = "vipw") and
+    evt.type in (open,openat) and (
+      proc.cmdline contains "passwd" or 
+      proc.cmdline = "vipw"
+    ) and
     fd.name contains "/etc/passwd" and
     evt.arg.flags contains "O_RDONLY" and not 
     evt.arg.flags contains "O_CLO" and not
     evt.arg.flags contains "WR" and not
     proc.name = systemd
   output: >
-    [ALERT] %evt.time User=%user.name opened sensitive file %fd.name using %proc.name (%proc.cmdline pid=%proc.pid ppid=%proc.ppid) wwwww=%evt.args
+    [ALERT] %evt.time User=%user.name opened sensitive file %fd.name using %proc.name (%proc.cmdline pid=%proc.pid ppid=%proc.ppid)
   priority: WARNING
   tags: [filesystem, sensitive]
   notify:

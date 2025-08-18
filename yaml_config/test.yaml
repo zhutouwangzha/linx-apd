@@ -1,9 +1,9 @@
 - rule: Passwd File Access by File Open
   desc: Detect direct file open of sensitive files by known read tools
   condition: >
-    evt.type in (openat)
+    evt.type in (sendto)
   output: >
-    res = %evt.res dir = %evt.dir num = %evt.num time = %evt.time type = %evt.type %fd.name
+    res = %evt.res dir = %evt.dir num = %evt.num time = %evt.time type = %evt.type %evt.arg[0] %evt.arg[1] %evt.arg[2]
   priority: WARNING
   tags: [filesystem, sensitive]
   notify:

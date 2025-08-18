@@ -11,6 +11,7 @@ typedef enum {
     MATCH_CONTEXT_LIST,
     MATCH_CONTEXT_UNARY,
     MATCH_CONTEXT_LOGIC,
+    MATCH_CONTEXT_VAL,
     MATCH_CONTEXT_MAX
 } match_context_type_t;
 
@@ -46,5 +47,10 @@ typedef struct {
     void *left;         /* 指向 linx_rule_match_t */
     void *right;        /* 指向 linx_rule_match_t */
 } logic_context_t;
+
+typedef struct {
+    field_result_t field;
+    void *operand;      /* 指向 linx_rule_match_t */
+} val_context_t;
 
 #endif /* __RUEL_MATCH_CONTEXT_H__ */

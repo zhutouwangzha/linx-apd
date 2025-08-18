@@ -61,7 +61,7 @@ EXECUTABLE := $(BIN_DIR)/linx-apd
 
 export TOPDIR CC CFLAGS LDFLAGS BUILD_DIR DEPENDS_DIR USR_DIR KERNEL_DIR EBPF_DIR
 
-.PHONY: all clean $(LIBRARY_DIRS) ebpf linx_apd
+.PHONY: all clean clean_kmod clean_ebpf clean_linx_apd $(LIBRARY_DIRS) ebpf linx_apd
 
 all: kmod ebpf linx_apd
 
@@ -96,15 +96,21 @@ $(LIBRARY_DIRS):
 	@echo "[Build module]: $(notdir $@)"
 	@$(MAKE) --no-print-directory -C $@ MODULE_NAME=$(notdir $@)
 
-clean:
-	@echo "[Cleaning build...]"
+clean_linx_apd:
 	@for dir in $(LIBRARY_DIRS); do \
 		echo "[Cleaning module]: $$(basename $$dir)"; \
 		$(MAKE) --no-print-directory -C $$dir clean; \
 	done
+	@rm -rf $(OBJ_DIR)/linx_apd
+
+clean_ebpf:
 	@echo "[Cleaning module]: $(basename $(EBPF_DIR))"
 	@$(MAKE) --no-print-directory -C $(EBPF_DIR) clean
+
+clean_kmod:
+	@echo "[Cleaning module]: $(basename $(KMOD_DIR))"
 	@$(MAKE) --no-print-directory -C $(KMOD_DIR) clean
-	@rm -rf $(OBJ_DIR)/linx_apd
+
+clean: clean_kmod clean_ebpf clean_linx_apd
 	@rm -rf $(BUILD_DIR)
 	@echo "[Clea complete]"

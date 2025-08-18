@@ -60,6 +60,8 @@ int BPF_PROG(execve_x, struct pt_regs *regs, long ret)
     linx_ringbuf_store_u32(ringbuf, tty);
 
     /* env */
+    LINX_READ_TASK_FIELD_INTO(&arg_start_pointer, task, mm, env_start);
+    LINX_READ_TASK_FIELD_INTO(&arg_end_pointer, task, mm, env_end);
     linx_ringbuf_store_charbufarray_as_bytebuf(ringbuf, 
                                                arg_start_pointer, 
                                                arg_end_pointer - arg_start_pointer, 

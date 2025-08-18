@@ -61,6 +61,7 @@ static int add_literal_segment(linx_output_match_t *match, char *literal, size_t
 
 static int add_variable_segment(linx_output_match_t *match, char *variable)
 {
+    int i = 0;
     segment_t *segment;
 
     if (match == NULL || variable == NULL) {
@@ -76,6 +77,20 @@ static int add_variable_segment(linx_output_match_t *match, char *variable)
     segment = malloc(sizeof(segment_t));
     if (segment == NULL) {
         return -1;
+    }
+
+    /**
+     * 将[xxx]替换为.xxx方便解析
+     */
+    while (variable[i] != '\0') {
+        if (variable[i] == '[') {
+            variable[i] = '.';
+        } else if (variable[i] == ']') {
+            variable[i] = '\0';
+            break;
+        }
+
+        ++i;
     }
 
     segment->type = SEGMENT_TYPE_VARIABLE;
@@ -124,7 +139,7 @@ int linx_output_match_compile(linx_output_match_t **match, char *format)
             while (*current && *current != ' ' &&
                    *current != '\t' && *current != '\n' && 
                    *current != '\r' && *current != ')' &&
-                   *current != '(')
+                   *current != '(' && *current != ',')
             {
                 current++;
             }
@@ -213,6 +228,7 @@ size_t format_field_value(field_result_t *field, char *buffer, size_t buffer_siz
     case LINX_FIELD_TYPE_CHARBUF:
     case LINX_FIELD_TYPE_UID:
     case LINX_FIELD_TYPE_PID:
+    case LINX_FIELD_TYPE_BYTEBUF:
         field_str_len = snprintf(field_str, sizeof(field_str), "%s", (char *)value_ptr);
         break;
     case LINX_FIELD_TYPE_CHARBUF_ARRAY:

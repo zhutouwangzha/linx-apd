@@ -163,7 +163,7 @@ linx_fd_info_t *linx_fd_info_create(pid_t pid, int64_t fd)
 		return NULL;	
     }
 
-	fd_info = calloc(1, sizeof(fd_info));
+	fd_info = calloc(1, sizeof(linx_fd_info_t));
 	if (!fd_info) {
 		return NULL;
 	}

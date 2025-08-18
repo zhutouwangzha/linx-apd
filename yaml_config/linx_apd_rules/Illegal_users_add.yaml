@@ -1,18 +1,18 @@
 - rule: Unauthorized Modification of /etc/passwd or /etc/shadow
   desc: Detects any modification to /etc/passwd or /etc/shadow by processes other than useradd and userdel
   condition: >
-    evt.type in (open, openat)
-    and evt.dir = <
-    and (
+    evt.type in (open, openat) and 
+    evt.dir = < and (
       fd.name contains /etc/passwd or 
       fd.name contains /etc/shadow
+    ) and 
+    evt.arg.flags contains "WR" and not 
+    evt.arg.flags contains "RD" and not 
+    proc.name = systemd and not (
+      proc.name in ("useradd", "userdel")
     )
-    and evt.arg.flags contains "WR"
-    and not evt.arg.flags contains "RD"
-    and not proc.name = systemd
-    and not (proc.name in ("useradd", "userdel"))
   output: >
-    Unauthorized modification of sensitive file (user=%user.name command=%proc.cmdline file=%fd.name data=%evt.arg.data pid=%proc.pid ppid=%proc.ppid) xxx=%evt.args
+    Unauthorized modification of sensitive file (user=%user.name command=%proc.cmdline file=%fd.name pid=%proc.pid ppid=%proc.ppid)
   priority: WARNING
   tags:
     - system

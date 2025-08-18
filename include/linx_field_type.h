@@ -11,18 +11,21 @@ typedef enum {
     LINX_FIELD_TYPE_UINT32,
     LINX_FIELD_TYPE_INT64,
     LINX_FIELD_TYPE_UINT64,
-    LINX_FIELD_TYPE_CHARBUF,             /* 可打印的字符串，数组 */
-    LINX_FIELD_TYPE_BYTEBUF,             /* 二进制数据，不方便打印 */
-    LINX_FIELD_TYPE_CHARBUF_ARRAY,       /* 可打印的字符串指针 */
-    LINX_FIELD_TYPE_CHARBUF_PAIR_ARRAY,  /* 字符串数组指针*/
-    LINX_FIELD_TYPE_BYTEBUF_ARRAY,       /* 二进制数据指针 */
+    LINX_FIELD_TYPE_FLAGS8,                 /* uint8 */
+    LINX_FIELD_TYPE_FLAGS16,                /* uint16 */
+    LINX_FIELD_TYPE_FLAGS32,                /* uint32 */
+    LINX_FIELD_TYPE_CHARBUF,                /* 可打印的字符串，数组 */
+    LINX_FIELD_TYPE_BYTEBUF,                /* 二进制数据，不方便打印 */
+    LINX_FIELD_TYPE_CHARBUF_ARRAY,          /* 可打印的字符串指针 */
+    LINX_FIELD_TYPE_CHARBUF_PAIR_ARRAY,     /* 字符串数组指针*/
+    LINX_FIELD_TYPE_BYTEBUF_ARRAY,          /* 二进制数据指针 */
     LINX_FIELD_TYPE_BOOL,
     LINX_FIELD_TYPE_FLOAT,
     LINX_FIELD_TYPE_DOUBLE,
-    LINX_FIELD_TYPE_UID,                /* uint32 */
-    LINX_FIELD_TYPE_PID,                /* int64 */
+    LINX_FIELD_TYPE_UID,                    /* uint32 */
+    LINX_FIELD_TYPE_PID,                    /* int64 */
     LINX_FIELD_TYPE_SOCKTUPLE,
-    LINX_FIELD_TYPE_STRUCT,             /* 结构体指针，用于带参数的字段解析 */
+    LINX_FIELD_TYPE_STRUCT,                 /* 结构体指针，用于带参数的字段解析 */
     LINX_FIELD_TYPE_MAX
 } linx_field_type_t;
 
