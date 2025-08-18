@@ -393,6 +393,20 @@ static inline uint16_t linx_push_bytebuf(uint8_t *data,
                                          uint16_t len_to_read,
                                          read_memory_t mem)
 {
+    // 关键修复：添加边界检查以满足eBPF验证器要求
+    // 确保len_to_read不会导致越界访问
+    uint64_t safe_pos = SAFE_ACCESS(*payload_pos);
+    uint64_t max_read_size = LINX_EVENT_MAX_SIZE - safe_pos;
+    
+    if (len_to_read > max_read_size) {
+        len_to_read = max_read_size;
+    }
+    
+    // 额外的保守限制，确保验证器可以静态分析
+    if (len_to_read > 4096) {
+        len_to_read = 4096;
+    }
+
     if (mem == KERNEL) {
         if (bpf_probe_read_kernel(&data[SAFE_ACCESS(*payload_pos)],
                                   len_to_read,
