@@ -51,20 +51,24 @@ static int linx_event_loop(void)
         }
 
         /* 根据配置选择匹配模式 */
+        bool match_found = false;
         if (apd_config && apd_config->mt_config.enable_mt_match) {
             /* 检查是否使用事件处理器 */
             linx_event_processor_t *processor = linx_event_processor_get();
             if (processor) {
-                /* 使用事件处理器进行异步处理 */
-                ret = linx_event_processor_process_event(event, fd);
+                /* 使用事件处理器进行多线程规则匹配 */
+                match_found = linx_event_processor_process_event(event, fd);
             } else {
                 /* 使用原有的多线程匹配 */
-                ret = linx_rule_set_match_rule_mt(event, fd);
+                match_found = linx_rule_set_match_rule_mt(event, fd);
             }
         } else {
             /* 单线程模式 */
-            ret = linx_rule_set_match_rule();
+            match_found = linx_rule_set_match_rule();
         }
+        
+        /* 转换为原来的ret逻辑 */
+        ret = match_found ? 1 : 0;
         
         if (ret) {
             /* 匹配成功 */
