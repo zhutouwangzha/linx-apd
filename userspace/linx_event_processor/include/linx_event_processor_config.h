@@ -2,9 +2,10 @@
 #define __LINX_EVENT_PROCESSOR_CONFIG_H__ 
 
 #include <stdbool.h>
+#include <stdint.h>
 
 typedef struct {
-    uint32_t thread_cound;
+    uint32_t thread_count;
     bool cpu_affinity;
     int priority;
 } linx_thread_pool_config_t;
