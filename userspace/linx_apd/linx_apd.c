@@ -14,6 +14,8 @@
 #include "linx_rule_engine_load.h"
 #include "linx_rule_engine_match.h"
 #include "linx_rule_engine_set.h"
+#include "rule_match_mt.h"
+#include "linx_config.h"
 #include "linx_resource_cleanup.h"
 #include "linx_event_queue.h"
 #include "linx_event.h"
@@ -25,10 +27,12 @@ static int linx_event_loop(void)
 {
     int ret = 0;
     linx_event_t *event = NULL;
+    linx_config_t *config = linx_get_config();
+    int64_t fd = -1;  /* 默认fd值 */
 
     ret = linx_engine_start();
     if (ret) {
-
+        return ret;
     }
 
     while (1) {
@@ -44,12 +48,18 @@ static int linx_event_loop(void)
 
         ret = linx_event_queue_push();
         if (ret) {
-
+            /* 非致命错误 */
         }
 
-        ret = linx_rule_set_match_rule();
+        /* 根据配置选择单线程或多线程规则匹配 */
+        if (config && config->mt_config.enable_mt_match) {
+            ret = linx_rule_set_match_rule_mt(event, fd);
+        } else {
+            ret = linx_rule_set_match_rule();
+        }
+        
         if (ret) {
-
+            /* 匹配成功 */
         }
     }
 
@@ -189,6 +199,20 @@ int main(int argc, char *argv[])
         goto out;
     } else {
         *type = LINX_RESOURCE_CLEANUP_RULE_ENGINE;
+    }
+    
+    /* 初始化多线程规则匹配（如果启用） */
+    linx_config_t *config = linx_get_config();
+    if (config && config->mt_config.enable_mt_match) {
+        ret = linx_rule_match_mt_init(config->mt_config.num_match_threads);
+        if (ret) {
+            LINX_LOG_ERROR("linx_rule_match_mt_init failed");
+            /* 非致命错误，回退到单线程模式 */
+            config->mt_config.enable_mt_match = false;
+        } else {
+            LINX_LOG_INFO("Initialized multi-thread rule matching with %d threads", 
+                         config->mt_config.num_match_threads);
+        }
     }
 
     /* 根据配置初始化采集模块 */

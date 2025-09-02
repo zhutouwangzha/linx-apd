@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 #include "linx_rule_engine_set.h"
 #include "linx_alert.h"
@@ -128,3 +129,5 @@ bool linx_rule_set_match_rule(void)
 
     return match;
 }
+
+
