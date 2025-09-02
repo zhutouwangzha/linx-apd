@@ -1,0 +1,73 @@
+# LINX APD 配置文件示例
+
+# 多线程规则匹配配置
+multithread_match:
+  # 是否启用多线程规则匹配
+  enabled: true
+  
+  # 匹配线程数量（默认为CPU核心数）
+  # 如果设置为0，将使用系统CPU核心数
+  num_threads: 4
+  
+  # 任务队列大小
+  queue_size: 1024
+
+# 规则配置
+rules:
+  # 规则文件路径
+  rule_files:
+    - /etc/linx/rules/default.yaml
+    - /etc/linx/rules/custom.yaml
+  
+  # 规则匹配选项
+  match_options:
+    # 匹配到规则后是否继续匹配后续规则
+    continue_on_match: false
+    
+    # 最大规则数量限制
+    max_rules: 1000
+
+# 事件处理配置
+event_processing:
+  # 事件队列大小
+  queue_size: 10000
+  
+  # 事件处理超时时间（秒）
+  timeout: 30
+
+# 日志配置
+logging:
+  # 日志级别: DEBUG, INFO, WARNING, ERROR
+  level: INFO
+  
+  # 日志文件路径
+  file: /var/log/linx/linx-apd.log
+  
+  # 日志文件最大大小（MB）
+  max_size: 100
+  
+  # 保留的日志文件数量
+  max_files: 10
+
+# 告警配置
+alert:
+  # 告警线程数
+  num_threads: 4
+  
+  # 告警队列大小
+  queue_size: 1000
+  
+  # 告警输出配置
+  outputs:
+    - type: syslog
+      enabled: true
+      facility: local0
+      
+    - type: file
+      enabled: true
+      path: /var/log/linx/alerts.log
+      
+    - type: webhook
+      enabled: false
+      url: http://example.com/linx/alerts
+      timeout: 5

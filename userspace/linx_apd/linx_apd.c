@@ -14,6 +14,9 @@
 #include "linx_rule_engine_load.h"
 #include "linx_rule_engine_match.h"
 #include "linx_rule_engine_set.h"
+#include "rule_match_thread_context.h"
+#include "linx_config.h"
+#include "linx_event_handler.h"
 #include "linx_resource_cleanup.h"
 #include "linx_event_queue.h"
 #include "linx_event.h"
@@ -28,7 +31,7 @@ static int linx_event_loop(void)
 
     ret = linx_engine_start();
     if (ret) {
-
+        return ret;
     }
 
     while (1) {
@@ -37,19 +40,10 @@ static int linx_event_loop(void)
             continue;
         }
 
-        ret = linx_event_rich(event);
+        /* 使用统一的事件处理器 */
+        ret = linx_handle_event(event);
         if (ret) {
-            continue;
-        }
-
-        ret = linx_event_queue_push();
-        if (ret) {
-
-        }
-
-        ret = linx_rule_set_match_rule();
-        if (ret) {
-
+            /* 记录错误但继续处理 */
         }
     }
 
