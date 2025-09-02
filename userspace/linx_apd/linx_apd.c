@@ -15,6 +15,7 @@
 #include "linx_rule_engine_match.h"
 #include "linx_rule_engine_set.h"
 #include "rule_match_mt.h"
+#include "linx_event_processor.h"
 #include "linx_config.h"
 #include "linx_resource_cleanup.h"
 #include "linx_event_queue.h"
@@ -53,7 +54,8 @@ static int linx_event_loop(void)
 
         /* 根据配置选择单线程或多线程规则匹配 */
         if (config && config->mt_config.enable_mt_match) {
-            ret = linx_rule_set_match_rule_mt(event, fd);
+            /* 已由 linx_event_processor 进行多线程调度，这里保持单线程匹配接口 */
+            ret = linx_rule_set_match_rule();
         } else {
             ret = linx_rule_set_match_rule();
         }
@@ -201,7 +203,7 @@ int main(int argc, char *argv[])
         *type = LINX_RESOURCE_CLEANUP_RULE_ENGINE;
     }
     
-    /* 初始化多线程规则匹配（如果启用） */
+    /* 初始化多线程规则匹配（如果启用） + 事件处理器 */
     linx_config_t *config = linx_get_config();
     if (config && config->mt_config.enable_mt_match) {
         ret = linx_rule_match_mt_init(config->mt_config.num_match_threads);
@@ -212,6 +214,14 @@ int main(int argc, char *argv[])
         } else {
             LINX_LOG_INFO("Initialized multi-thread rule matching with %d threads", 
                          config->mt_config.num_match_threads);
+
+            linx_event_processor_config_t ep_cfg = {
+                .fetcher_thread_count = (uint32_t)sysconf(_SC_NPROCESSORS_ONLN),
+                .matcher_thread_count = (uint32_t)(sysconf(_SC_NPROCESSORS_ONLN) * 2),
+            };
+            if (linx_event_processor_init(&ep_cfg) == 0) {
+                linx_event_processor_start();
+            }
         }
     }
 
