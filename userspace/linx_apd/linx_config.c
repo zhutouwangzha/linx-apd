@@ -1,5 +1,5 @@
 #include <stdlib.h>
-#include <sysconf.h>
+#include <unistd.h>
 #include "linx_config.h"
 
 static linx_config_t *g_config = NULL;

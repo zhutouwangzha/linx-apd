@@ -29,7 +29,6 @@ int linx_rule_set_add(linx_rule_t *rule, linx_rule_match_t *match, linx_output_m
 
 bool linx_rule_set_match_rule(void);
 
-/* 多线程版本的规则匹配函数 */
-bool linx_rule_set_match_rule_mt(linx_event_t *event, int64_t fd);
+
 
 #endif /* __LINX_RULE_ENGINE_SET_H__ */

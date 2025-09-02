@@ -12,6 +12,7 @@
 #include "linx_rule_engine_load.h"
 #include "linx_rule_engine_match.h"
 #include "linx_rule_engine_set.h"
+#include "rule_match_mt.h"
 #include "linx_resource_cleanup.h"
 #include "linx_process_cache.h"
 #include "linx_machine_status.h"
@@ -31,6 +32,7 @@ void linx_resource_cleanup(void)
         linx_engine_cleanup();
         /* fall through */
     case LINX_RESOURCE_CLEANUP_RULE_ENGINE:
+        linx_rule_match_mt_deinit();  /* 清理多线程规则匹配 */
         linx_rule_set_deinit();
         /* fall through */
     case LINX_RESOURCE_CLEANUP_ALERT:

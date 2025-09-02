@@ -4,7 +4,6 @@
 
 #include "linx_rule_engine_set.h"
 #include "linx_alert.h"
-#include "rule_match_thread_context.h"
 
 static linx_rule_set_t *rule_set = NULL;
 

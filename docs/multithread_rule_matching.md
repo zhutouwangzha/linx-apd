@@ -1,4 +1,4 @@
-# 多线程规则匹配使用指南
+# 多线程规则匹配使用指南（使用 linx_thread_pool）
 
 ## 概述
 
@@ -14,15 +14,15 @@
 
 ### 2. 解决方案
 
+#### 使用现有的 linx_thread_pool 模块
+- 利用项目中成熟的线程池实现
+- 遵循项目统一的线程管理风格
+- 支持线程暂停、恢复、终止等高级特性
+
 #### 线程安全的事件上下文
 - 为每个线程创建独立的事件上下文 (`thread_event_context_t`)
 - 每个上下文包含事件数据的副本和相关缓存
-- 线程本地存储确保上下文隔离
-
-#### 线程池管理
-- 预创建的工作线程池避免频繁创建/销毁线程
-- 任务队列实现负载均衡
-- 可配置的线程数和队列大小
+- 使用 pthread_key 实现线程本地存储
 
 #### 规则分片
 - 将规则集分配给不同线程并行处理
@@ -69,33 +69,51 @@ if (config && config->mt_config.enable_mt_match) {
 
 ## 实现细节
 
-### 1. 线程本地事件上下文
+### 1. 使用 linx_thread_pool 的任务结构
+
+```c
+/* 规则匹配任务参数 */
+typedef struct {
+    linx_event_t *event;               /* 事件数据 */
+    int64_t fd;                        /* 文件描述符 */
+    size_t rule_start;                 /* 起始规则索引 */
+    size_t rule_end;                   /* 结束规则索引 */
+    bool *match_result;                /* 匹配结果（共享） */
+    pthread_mutex_t *result_mutex;     /* 结果互斥锁 */
+    pthread_cond_t *complete_cond;     /* 完成条件变量 */
+    int *completed_count;              /* 已完成任务数 */
+} rule_match_task_arg_t;
+```
+
+### 2. 线程本地事件上下文
 
 ```c
 typedef struct {
-    event_t evt;                    // 事件数据副本
-    void *fd_cache;                 // fd信息缓存
-    void *proc_cache;               // 进程信息缓存
-    void *user_cache;               // 用户信息缓存
-    void *group_cache;              // 组信息缓存
-    field_update_table_t *tables;   // 字段更新表
-    size_t table_count;             // 表数量
+    event_t evt;                       /* 事件数据副本 */
+    field_update_table_t tables[5];    /* 字段更新表 */
+    void *fd_info;                     /* fd信息 */
+    void *proc_info;                   /* 进程信息 */
+    void *user_info;                   /* 用户信息 */
+    void *group_info;                  /* 组信息 */
 } thread_event_context_t;
 ```
 
-### 2. 工作流程
+### 3. 工作流程
 
 1. **事件到达**: 主线程接收事件
 2. **事件丰富**: 在主线程中完成
-3. **任务分配**: 将规则集分片，创建匹配任务
-4. **并行匹配**: 工作线程并行执行规则匹配
-5. **结果聚合**: 收集所有线程的匹配结果
+3. **任务创建**: 根据线程数将规则集分片
+4. **任务提交**: 使用 `linx_thread_pool_add_task` 提交任务
+5. **并行匹配**: 线程池中的工作线程并行执行规则匹配
+6. **结果等待**: 主线程通过条件变量等待所有任务完成
+7. **结果返回**: 返回最终的匹配结果
 
-### 3. 线程安全保证
+### 4. 线程安全保证
 
 - 每个线程独立的事件上下文
+- 使用 pthread 线程本地存储 (TLS) 缓存上下文
 - 使用互斥锁保护共享的匹配结果
-- 避免全局状态的修改
+- 使用条件变量同步任务完成状态
 
 ## 注意事项
 
@@ -143,9 +161,13 @@ typedef struct {
 ## 最佳实践
 
 1. **逐步迁移**: 先在测试环境验证，再部署到生产环境
-2. **监控指标**: 监控CPU使用率、内存使用、匹配延迟等
-3. **动态调整**: 根据实际负载调整线程数和队列大小
+2. **监控指标**: 
+   - 使用 `linx_thread_pool_get_active_threads()` 监控活跃线程数
+   - 使用 `linx_thread_pool_get_queue_size()` 监控队列大小
+   - 监控CPU使用率、内存使用、匹配延迟等
+3. **动态调整**: 根据实际负载调整线程数
 4. **规则优化**: 将耗时的规则放在前面，提高短路效率
+5. **线程管理**: 利用 linx_thread_pool 的暂停/恢复功能进行维护
 
 ## 未来改进
 
