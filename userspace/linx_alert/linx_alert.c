@@ -188,7 +188,7 @@ int linx_alert_update_config(linx_alert_config_t config)
  * @param priority 告警优先级
  * @return 成功返回0，失败返回-1
  */
-int linx_alert_send_async(linx_output_match_t *output, const char *rule_name, int priority)
+int linx_alert_send_async(linx_output_match_t *output, linx_rule_t *rule)
 {
     char buffer[4096];
     int ret;
@@ -207,7 +207,7 @@ int linx_alert_send_async(linx_output_match_t *output, const char *rule_name, in
     }
 
     // 创建告警消息对象
-    message = linx_alert_message_create(buffer, rule_name, priority);
+    message = linx_alert_message_create(buffer, rule);
     if (!message) {
         return -1;
     }
@@ -237,7 +237,7 @@ int linx_alert_send_async(linx_output_match_t *output, const char *rule_name, in
     return 0;
 }
 
-int linx_alert_send_sync(linx_output_match_t *output, const char *rule_name, int priority)
+int linx_alert_send_sync(linx_output_match_t *output, linx_rule_t *rule)
 {
     int ret;
     char buffer[4096];
@@ -252,7 +252,7 @@ int linx_alert_send_sync(linx_output_match_t *output, const char *rule_name, int
         return -1;
     }
 
-    message = linx_alert_message_create(buffer, rule_name, priority);
+    message = linx_alert_message_create(buffer, rule);
     if (!message) {
         return -1;
     }
@@ -269,9 +269,9 @@ int linx_alert_send_sync(linx_output_match_t *output, const char *rule_name, int
 }
 
 /* 格式化和发送函数 */
-int linx_alert_format_and_send(linx_output_match_t *output, const char *rule_name, int priority)
+int linx_alert_format_and_send(linx_output_match_t *output, linx_rule_t *rule)
 {
-    return linx_alert_send_sync(output, rule_name, priority);
+    return linx_alert_send_sync(output, rule);
 }
 
 /* 统计信息函数 */
@@ -301,7 +301,7 @@ void linx_alert_get_stats(long *total_send, long *total_fail)
 }
 
 /* 辅助函数 */
-linx_alert_message_t *linx_alert_message_create(const char *formatted_message, const char *rule_name, int priority)
+linx_alert_message_t *linx_alert_message_create(const char *formatted_message, linx_rule_t *rule)
 {
     linx_alert_message_t *message;
 
@@ -316,15 +316,16 @@ linx_alert_message_t *linx_alert_message_create(const char *formatted_message, c
 
     memset(message, 0, sizeof(linx_alert_message_t));
 
-    message->message_len = strlen(formatted_message);
-    message->message = strdup(formatted_message);
-
-    if (rule_name) {
-        message->rule_name = strdup(rule_name);
+    if (formatted_message) {
+        message->message_len = strlen(formatted_message);
+        message->message = strdup(formatted_message);
+    } else {
+        message->message_len = 0;
+        message->message = NULL;
     }
 
-    message->priority = priority;
-    
+    message->rule = rule;
+
     return message;
 }
 
@@ -337,11 +338,6 @@ void linx_alert_message_destroy(linx_alert_message_t *message)
     if (message->message) {
         free(message->message);
         message->message = NULL;
-    }
-
-    if (message->rule_name) {
-        free(message->rule_name);
-        message->rule_name = NULL;
     }
 
     free(message);

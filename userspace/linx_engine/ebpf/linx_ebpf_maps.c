@@ -237,3 +237,34 @@ clean_load_tail_call_map:
     close(exit_table_fd);
     return -1;
 }
+
+int linx_ebpf_final_maps_after_load(struct linx_bpf *skel)
+{
+    int ret;
+    linx_global_config_t *config = linx_config_get();
+    if (config == NULL) {
+        return -1;
+    }
+
+    linx_capture_set_t set = {0};
+    ret = linx_ebpf_update_capture_set(skel, &set);
+    if (ret) {
+        return ret;
+    }
+
+    linx_ebpf_set_filter_pids(skel, config->engine.data.ebpf.filter_pids);
+
+    linx_ebpf_set_filter_comms(skel, config->engine.data.ebpf.filter_comms);
+
+    linx_ebpf_set_drop_mode(skel, config->engine.data.ebpf.drop_mode);
+
+    linx_ebpf_set_drop_failed(skel, config->engine.data.ebpf.drop_failed);
+
+    linx_ebpf_set_snaplen(skel, config->snaplen);
+
+    linx_ebpf_set_do_snaplen(skel, false);
+
+    linx_ebpf_set_interesting_syscalls_table(skel, config->engine.data.ebpf.interest_syscall_table);
+
+    return ret;
+}

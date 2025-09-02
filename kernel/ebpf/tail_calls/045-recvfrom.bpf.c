@@ -42,14 +42,18 @@ int BPF_PROG(recvfrom_x, struct pt_regs *regs, long ret)
         unsigned long args[5] = {0};
         extract__network_args(args, 5, regs);
 
-        // int64_t bytes_to_read = ret > 0 ? ret : args[2];
-        // uint16_t snaplen = 128;
-        // if ((int64_t)snaplen > bytes_to_read) {
-        //     snaplen = bytes_to_read;
-        // }
+        snaplen_args_t snaplen_args = {
+            .only_port_range = false,
+            .type = LINX_EVENT_TYPE_RECVFROM_X,
+        };
+        uint16_t snaplen = maps_get_snaplen();
+        apply_snaplen(regs, &snaplen, &snaplen_args);
+        if (snaplen > ret) {
+            snaplen = ret;
+        }
 
-        // unsigned long received_data_pointer = args[1];
-        // linx_ringbuf_store_bytebuf(ringbuf, received_data_pointer, snaplen, USER);
+        unsigned long received_data_pointer = args[1];
+        linx_ringbuf_store_bytebuf(ringbuf, received_data_pointer, snaplen, USER);
 
         uint32_t socket_fd = (uint32_t)args[0];
         struct sockaddr *usrsockaddr = (struct sockaddr *)args[4];

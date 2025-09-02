@@ -28,8 +28,11 @@ typedef struct {
     linx_thread_pool_t *thread_pool;
     linx_log_message_t **queue;
     pthread_mutex_t lock;
+    pthread_cond_t not_empty;
 
-    int queue_size;
+    int head;
+    int tail;
+    volatile int queue_size;
     int queue_capacity;
 } linx_log_t;
 

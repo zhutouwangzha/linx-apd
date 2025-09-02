@@ -3,6 +3,7 @@
 
 #include "user_struct.h"
 #include "group_struct.h"
+#include "ifinfo_list.h"
 
 int linx_machine_status_init(void);
 
@@ -11,5 +12,7 @@ void linx_machine_status_deinit(void);
 user_t *linx_machine_status_get_user(void);
 
 group_t *linx_machine_status_get_group(void);
+
+ifinfo_list_t *linx_machine_status_get_ifinfo(void);
 
 #endif /* __LINX_MACHINE_STATUS_H__ */

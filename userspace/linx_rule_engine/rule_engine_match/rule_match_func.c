@@ -10,13 +10,20 @@
 #include "linx_process_cache.h"
 #include "linx_event_table.h"
 #include "linx_name_value.h"
+#include "field_struct.h"
 
-static void *matcher_get_value_ptr(field_result_t *field, linx_field_type_t *type)
+static void *matcher_get_value_ptr(field_result_t *field, linx_field_type_t *type, size_t *size)
 {
     void *ptr = linx_hash_map_get_value_ptr(field, type);
 
     if (ptr && field->type == LINX_FIELD_TYPE_STRUCT) {
-        ptr = (void *)(*(uint64_t *)ptr);
+        if (size) {
+            *size = ((field_struct_t *)ptr)->size;
+        }
+
+        ptr = ((field_struct_t *)ptr)->data;
+    } else if (size) {
+        *size = field->size;
     }
 
     return ptr;
@@ -39,6 +46,7 @@ static int matcher_get_real_value_ptr(linx_field_type_t type, char **value,
         *value = value_ptr;
         break;
     case LINX_FIELD_TYPE_CHARBUF_ARRAY:
+    case LINX_FIELD_TYPE_CHARBUF_PAIR_ARRAY:
         *value = (char *)(*(uint64_t *)value_ptr);
         break;
     case LINX_FIELD_TYPE_FLAGS32:
@@ -48,7 +56,9 @@ static int matcher_get_real_value_ptr(linx_field_type_t type, char **value,
             flags =  *(uint32_t *)value_ptr;
 
             for (int i = 0; name_value[i].name; ++i) {
-                if (flags & name_value[i].value) {
+                if (flags & name_value[i].value ||
+                    flags == name_value[i].value) 
+                {
                     bytes_write += snprintf(buffer + bytes_write, buf_size - bytes_write, 
                                             "%s", name_value[i].name);
                 }
@@ -65,31 +75,78 @@ static int matcher_get_real_value_ptr(linx_field_type_t type, char **value,
         break;
     }
 
+    if (*value == NULL) {
+        ret = -1;
+    }
+
     return ret;
 }
 
-static char *linx_str_lower(char *str)
+static void *binary_search(const void *src, size_t src_len, const void *dst, size_t dst_len)
+{
+    const uint8_t *h, *n;
+    size_t max_index = src_len - dst_len;
+
+    if (dst_len == 0) {
+        return (void *)src;
+    }
+
+    if (src == NULL || dst == NULL || src_len < dst_len) {
+        return NULL;
+    }
+
+    h = src;
+    n = dst;
+
+    for (size_t i = 0; i < max_index; ++i) {
+        if (h[i] != n[0]) {
+            continue;
+        }
+
+        if (memcmp(h + i, n, dst_len) == 0) {
+            return (void *)(h + i);
+        }
+    }
+
+    return NULL;
+}
+
+/**
+ * 该函数将字符串或二进制流中所有大写字母转换为小写
+ * 不以 \0 终止操作，而是以传入的长度来判断
+ * 处理完后依然会在最后新增一个 \0 结束符
+ */
+static char *linx_bin_lower(void *str, size_t size)
 {
     char *lower, *p;
-    
+
     if (!str) {
         return NULL;
     }
 
-    lower =  malloc(strlen(str) + 1);
+    lower = malloc(size + 1);
     if (!lower) {
         return NULL;
     }
 
     p = lower;
 
-    while (*str) {
-        *p++ = tolower((unsigned char)*str++);
+    for (size_t i = 0; i < size; ++i) {
+        *p++ = tolower(*(uint8_t *)str++);
     }
-    
+
     *p = '\0';
 
     return lower;
+}
+
+static char *linx_str_lower(void *str)
+{
+    if (!str) {
+        return NULL;
+    }
+
+    return linx_bin_lower(str, strlen(str));
 }
 
 bool and_matcher(void *context)
@@ -134,7 +191,7 @@ bool num_gt_matcher(void *context)
 {
     linx_field_type_t type;
     num_context_t *ctx = (num_context_t *)context;
-    void *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
+    void *value_ptr = matcher_get_value_ptr(&ctx->field, &type, NULL);
     if (!value_ptr) {
         return false;
     }
@@ -147,7 +204,7 @@ bool num_ge_matcher(void *context)
 {
     linx_field_type_t type;
     num_context_t *ctx = (num_context_t *)context;
-    void *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
+    void *value_ptr = matcher_get_value_ptr(&ctx->field, &type, NULL);
     if (!value_ptr) {
         return false;
     }
@@ -160,7 +217,7 @@ bool num_lt_matcher(void *context)
 {
     linx_field_type_t type;
     num_context_t *ctx = (num_context_t *)context;
-    void *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
+    void *value_ptr = matcher_get_value_ptr(&ctx->field, &type, NULL);
     if (!value_ptr) {
         return false;
     }
@@ -173,7 +230,7 @@ bool num_le_matcher(void *context)
 {
     linx_field_type_t type;
     num_context_t *ctx = (num_context_t *)context;
-    void *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
+    void *value_ptr = matcher_get_value_ptr(&ctx->field, &type, NULL);
     if (!value_ptr) {
         return false;
     }
@@ -190,14 +247,14 @@ bool str_assign_matcher(void *context)
     linx_field_type_t type;
     str_context_t *ctx = (str_context_t *)context;
 
-    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
+    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type, NULL);
     if (!value_ptr) {
         return false;
     }
 
     if (matcher_get_real_value_ptr(type, &value, value_ptr, 
                                    buffer, sizeof(buffer), true,
-                                   &ctx->field)) 
+                                   &ctx->field) == -1) 
     {
         return false;
     }
@@ -206,7 +263,7 @@ bool str_assign_matcher(void *context)
         return false;
     }
 
-    ret = strncmp(value, ctx->str, ctx->str_len);
+    ret = memcmp(value, ctx->str, ctx->str_len);
 
     return (ret == 0) ? true : false;
 }
@@ -219,24 +276,31 @@ bool str_ne_matcher(void *context)
 bool str_contains_matcher(void *context)
 {
     char *value;
+    size_t value_size;
     const char *result;
     char buffer[256] = {0};
     linx_field_type_t type;
     str_context_t *ctx = (str_context_t *)context;
 
-    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
+    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type, &value_size);
     if (!value_ptr) {
         return false;
     }
 
     if (matcher_get_real_value_ptr(type, &value, value_ptr, 
         buffer, sizeof(buffer), true,
-        &ctx->field)) 
+        &ctx->field) == -1) 
     {
         return false;
     }
 
-    result = strstr(value, ctx->str);
+    if (type == LINX_FIELD_TYPE_BYTEBUF ||
+        type == LINX_FIELD_TYPE_BYTEBUF_ARRAY)
+    {
+        result = binary_search(value, value_size, ctx->str, ctx->str_len);
+    } else {
+        result = strstr(value, ctx->str);
+    }
 
     return (result != NULL) ? true : false;
 }
@@ -244,35 +308,48 @@ bool str_contains_matcher(void *context)
 bool str_icontains_matcher(void *context)
 {
     char *value;
-    const char *result;
+    size_t value_size;
+    const char *result = NULL;
     char *lower1, *lower2;
     char buffer[256] = {0};
     linx_field_type_t type;
     str_context_t *ctx = (str_context_t *)context;
 
-    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
+    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type, &value_size);
     if (!value_ptr) {
         return false;
     }
 
     if (matcher_get_real_value_ptr(type, &value, value_ptr, 
         buffer, sizeof(buffer), true,
-        &ctx->field)) 
+        &ctx->field) == -1) 
     {
         return false;
     }
 
-    lower1 = linx_str_lower(value);
     lower2 = linx_str_lower(ctx->str);
-
-    if (lower1 && lower2) {
-        result = strstr(lower1, lower2);
-    } else {
-        return false;
+    if (!lower2) {
+        goto out;
     }
 
-    free(lower1);
-    free(lower2);
+    if (type == LINX_FIELD_TYPE_BYTEBUF ||
+        type == LINX_FIELD_TYPE_BYTEBUF_ARRAY) 
+    {
+        lower1 = linx_bin_lower(value, value_size);
+        result = binary_search(lower1, value_size, lower2, ctx->str_len);
+    } else {
+        lower1 = linx_str_lower(value);
+        result = strstr(lower1, lower2);
+    }
+
+out:
+    if (lower1) {
+        free(lower1);
+    }
+
+    if (lower2) {
+        free(lower2);
+    }
 
     return (result != NULL) ? true : false;
 }
@@ -284,14 +361,14 @@ bool str_startswith_matcher(void *context)
     linx_field_type_t type;
     str_context_t *ctx = (str_context_t *)context;
 
-    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
+    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type, NULL);
     if (!value_ptr) {
         return false;
     }
 
     if (matcher_get_real_value_ptr(type, &value, value_ptr, 
         buffer, sizeof(buffer), true,
-        &ctx->field)) 
+        &ctx->field) == -1) 
     {
         return false;
     }
@@ -311,14 +388,14 @@ bool str_endswith_matcher(void *context)
     linx_field_type_t type;
     str_context_t *ctx = (str_context_t *)context;
 
-    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
+    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type, NULL);
     if (!value_ptr) {
         return false;
     }
 
     if (matcher_get_real_value_ptr(type, &value, value_ptr, 
         buffer, sizeof(buffer), true,
-        &ctx->field)) 
+        &ctx->field) == -1) 
     {
         return false;
     }
@@ -342,14 +419,14 @@ bool list_in_matcher(void *context)
     linx_field_type_t type;
     list_context_t *ctx = (list_context_t *)context;
 
-    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type);
+    char *value_ptr = matcher_get_value_ptr(&ctx->field, &type, NULL);
     if (!value_ptr) {
         return false;
     }
 
     if (matcher_get_real_value_ptr(type, &value, value_ptr, 
         buffer, sizeof(buffer), true,
-        &ctx->field)) 
+        &ctx->field) == -1) 
     {
         return false;
     }
@@ -378,7 +455,7 @@ bool val_matcher(void *context)
     val_context_t *ctx = (val_context_t *)context;
     linx_rule_match_t *op = (linx_rule_match_t *)ctx->operand;
 
-    value_ptr = matcher_get_value_ptr(&ctx->field, &type);
+    value_ptr = matcher_get_value_ptr(&ctx->field, &type, NULL);
     if (!value_ptr) {
         return false;
     }
@@ -402,7 +479,7 @@ bool val_matcher(void *context)
 
         if (matcher_get_real_value_ptr(type, &value, value_ptr,
                                        buffer, 256, true,
-                                       &ctx->field))
+                                       &ctx->field) == -1)
         {
             free(buffer);
             return false;

@@ -393,6 +393,17 @@ static inline uint16_t linx_push_bytebuf(uint8_t *data,
                                          uint16_t len_to_read,
                                          read_memory_t mem)
 {
+    uint64_t safe_pos = SAFE_ACCESS(*payload_pos);
+    uint64_t max_read_size = LINX_EVENT_MAX_SIZE - safe_pos;
+
+    if (len_to_read > max_read_size) {
+        len_to_read = max_read_size - 1;
+    }
+
+    if (len_to_read > LINX_SNAPLEN_MAX) {
+        len_to_read = LINX_SNAPLEN_MAX;
+    }
+
     if (mem == KERNEL) {
         if (bpf_probe_read_kernel(&data[SAFE_ACCESS(*payload_pos)],
                                   len_to_read,

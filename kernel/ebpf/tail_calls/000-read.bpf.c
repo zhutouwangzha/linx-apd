@@ -35,15 +35,15 @@ int BPF_PROG(read_x, struct pt_regs *regs, long ret)
     linx_ringbuf_store_s64(ringbuf, ret);
 
     if (ret > 0) {
-        // snaplen_args_t snaplen_args = {
-        //     .only_port_range = false,
-        //     .type = LINX_EVENT_TYPE_READ_X,
-        // };
-        uint16_t snaplen = 512;
-        // apply_snaplen(regs, &snaplen, &snaplen_args);
-        // if (snaplen > ret) {
-        //     snaplen = ret;
-        // }
+        snaplen_args_t snaplen_args = {
+            .only_port_range = false,
+            .type = LINX_EVENT_TYPE_READ_X,
+        };
+        uint16_t snaplen = maps_get_snaplen();
+        apply_snaplen(regs, &snaplen, &snaplen_args);
+        if (snaplen > ret) {
+            snaplen = ret;
+        }
 
         unsigned long data_pointer = get_pt_regs_argumnet(regs, 1);
         linx_ringbuf_store_bytebuf(ringbuf, data_pointer, snaplen, USER);

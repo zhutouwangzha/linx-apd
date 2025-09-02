@@ -19,6 +19,7 @@
 #include "linx_event.h"
 #include "linx_process_cache.h"
 #include "linx_machine_status.h"
+#include "linx_control.h"
 
 static int linx_event_loop(void)
 {
@@ -117,35 +118,43 @@ int main(int argc, char *argv[])
         *type = LINX_RESOURCE_CLEANUP_LOG;
     }
 
+    ret = linx_control_create(NULL);
+    if (ret) {
+        fprintf(stderr, "linx_control_create failed\n");
+        goto out;
+    } else {
+        *type = LINX_RESOURCE_CLEANUP_CONTROL;
+    }
+
     /**
      * hash表初始化
     */
-   ret = linx_hash_map_init();
-   if (ret) {
+    ret = linx_hash_map_init();
+    if (ret) {
         LINX_LOG_ERROR("linx_hash_map_init failed\n");
     } else {
         *type = LINX_RESOURCE_CLEANUP_HASH_MAP;
-   }
-
-    /**
-     * 进程缓存初始化
-    */
-   ret = linx_process_cache_init();
-   if (ret) {
-        LINX_LOG_ERROR("linx_process_cache_init failed\n");
-    } else {
-        *type = LINX_RESOURCE_CLEANUP_PROCESS_CACHE;
-   }
+    }
 
     /**
      * 机器状态初始化
     */
-   ret = linx_machine_status_init();
-   if (ret) {
+    ret = linx_machine_status_init();
+    if (ret) {
         LINX_LOG_ERROR("linx_machine_status_init failed\n");
     } else {
         *type = LINX_RESOURCE_CLEANUP_MACHINE_STATUS;
-   }
+    }
+
+    /**
+     * 进程缓存初始化
+    */
+    ret = linx_process_cache_init();
+    if (ret) {
+        LINX_LOG_ERROR("linx_process_cache_init failed\n");
+    } else {
+        *type = LINX_RESOURCE_CLEANUP_PROCESS_CACHE;
+    }
 
     ret = linx_event_queue_init(2);
     if (ret) {

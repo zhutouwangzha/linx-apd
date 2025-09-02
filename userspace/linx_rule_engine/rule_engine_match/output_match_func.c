@@ -3,6 +3,7 @@
 #include "output_match_func.h"
 #include "linx_hash_map.h"
 #include "linx_field_type.h"
+#include "field_struct.h"
 
 static int resize_segments(linx_output_match_t *match)
 {
@@ -151,10 +152,13 @@ int linx_output_match_compile(linx_output_match_t **match, char *format)
             }
 
             if (add_variable_segment(*match, variable_name)) {
+                free(variable_name);
+                variable_name = NULL;
                 return -1;
             }
 
             free(variable_name);
+            variable_name = NULL;
             start = current;
         } else {
             current++;
@@ -197,7 +201,7 @@ size_t format_field_value(field_result_t *field, char *buffer, size_t buffer_siz
 
     // 根据字段类型格式化字段值为字符串
     if (field->type == LINX_FIELD_TYPE_STRUCT) {
-        value_ptr = (void *)(*(uint64_t *)value_ptr);
+        value_ptr = ((field_struct_t *)value_ptr)->data;
     }
 
     switch (type) {
@@ -205,18 +209,21 @@ size_t format_field_value(field_result_t *field, char *buffer, size_t buffer_siz
         field_str_len = snprintf(field_str, sizeof(field_str), "%hhd", *(int8_t *)value_ptr);
         break;
     case LINX_FIELD_TYPE_UINT8:
+    case LINX_FIELD_TYPE_FLAGS8:
         field_str_len = snprintf(field_str, sizeof(field_str), "%hhu", *(uint8_t *)value_ptr);
         break;
     case LINX_FIELD_TYPE_INT16:
         field_str_len = snprintf(field_str, sizeof(field_str), "%hd", *(int16_t *)value_ptr);
         break;
     case LINX_FIELD_TYPE_UINT16:
+    case LINX_FIELD_TYPE_FLAGS16:
         field_str_len = snprintf(field_str, sizeof(field_str), "%hu", *(uint16_t *)value_ptr);
         break;
     case LINX_FIELD_TYPE_INT32:
         field_str_len = snprintf(field_str, sizeof(field_str), "%d", *(int32_t *)value_ptr);
         break;
     case LINX_FIELD_TYPE_UINT32:
+    case LINX_FIELD_TYPE_FLAGS32:
         field_str_len = snprintf(field_str, sizeof(field_str), "%u", *(uint32_t *)value_ptr);
         break;
     case LINX_FIELD_TYPE_INT64:
@@ -226,9 +233,9 @@ size_t format_field_value(field_result_t *field, char *buffer, size_t buffer_siz
         field_str_len = snprintf(field_str, sizeof(field_str), "%lu", *(uint64_t *)value_ptr);
         break;
     case LINX_FIELD_TYPE_CHARBUF:
+    case LINX_FIELD_TYPE_BYTEBUF:
     case LINX_FIELD_TYPE_UID:
     case LINX_FIELD_TYPE_PID:
-    case LINX_FIELD_TYPE_BYTEBUF:
         field_str_len = snprintf(field_str, sizeof(field_str), "%s", (char *)value_ptr);
         break;
     case LINX_FIELD_TYPE_CHARBUF_ARRAY:

@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <dirent.h>
+#include <arpa/inet.h>
+#include <ctype.h>
 
 #include "linx_event_rich.h"
 #include "linx_event_get.h"
@@ -42,7 +44,7 @@ static int bind_field_evt(void)
         FIELD_MAP(event_t, rawarg, LINX_FIELD_TYPE_STRUCT)
         FIELD_MAP(event_t, arg, LINX_FIELD_TYPE_STRUCT)
         FIELD_MAP(event_t, res, LINX_FIELD_TYPE_CHARBUF)
-        FIELD_MAP(event_t, rawres, LINX_FIELD_TYPE_CHARBUF)
+        FIELD_MAP(event_t, rawres, LINX_FIELD_TYPE_INT64)
         FIELD_MAP(event_t, failed, LINX_FIELD_TYPE_BOOL)
         FIELD_MAP(event_t, dir, LINX_FIELD_TYPE_CHARBUF)
     END_FIELD_MAPPINGS(evt)
@@ -72,10 +74,11 @@ static void rich_event_clean(linx_event_type_t type)
         switch (g_linx_event_table[type].params[i].type) {
         case LINX_FIELD_TYPE_UID:
         case LINX_FIELD_TYPE_PID:
-            free(evt.arg.data[i]);
-            evt.arg.data[i] = evt.rawarg.data[i] = NULL;
-            break;
+            free(evt.arg[i].data);
+            /* fall through */
         default:
+            evt.arg[i].data = evt.rawarg[i].data = NULL;
+            evt.arg[i].size = evt.rawarg[i].size = 0;
             break;
         }
     }
@@ -101,25 +104,32 @@ static void rich_event_args(linx_event_t *event)
         case LINX_FIELD_TYPE_UID:
             struct passwd *pw = getpwuid((uid_t)(*(uint32_t *)(base + size)));
             if (pw) {
-                evt.arg.data[i] = evt.rawarg.data[i] = 
+                evt.arg[i].data = evt.rawarg[i].data = 
                     strdup(pw->pw_name);
             } else {
-                evt.arg.data[i] = evt.rawarg.data[i] = 
+                evt.arg[i].data = evt.rawarg[i].data = 
                     strdup("unknown");
             }
+
+            evt.arg[i].size = evt.rawarg[i].size = 
+                strlen(evt.arg[i].data);
             break;
         case LINX_FIELD_TYPE_PID:
             linx_process_info_t *info = linx_process_cache_get((pid_t)(*(int64_t *)(base + size)));
             if (info) {
-                evt.arg.data[i] = evt.rawarg.data[i] = 
+                evt.arg[i].data = evt.rawarg[i].data = 
                     strdup(info->name);
             } else {
-                evt.arg.data[i] = evt.rawarg.data[i] = 
+                evt.arg[i].data = evt.rawarg[i].data = 
                     strdup("unknown");
             }
+
+            evt.arg[i].size = evt.rawarg[i].size = 
+                strlen(evt.arg[i].data);
             break;
         default:
-            evt.arg.data[i] = evt.rawarg.data[i] = base + size;
+            evt.arg[i].data = evt.rawarg[i].data = base + size;
+            evt.arg[i].size = evt.rawarg[i].size = event->params_size[i];
             break;
         }
 
@@ -130,6 +140,7 @@ static void rich_event_args(linx_event_t *event)
 static char *parse_dirfd(linx_event_t *event, char *name, int64_t dirfd)
 {
     linx_process_info_t *info;
+    linx_fd_info_t *fd_info;
 
     if (name != NULL && name[0] == '/') {
         return "";
@@ -142,7 +153,229 @@ static char *parse_dirfd(linx_event_t *event, char *name, int64_t dirfd)
         }
     }
 
+    fd_info = linx_process_cache_get_fd((pid_t)event->pid, dirfd);
+    if (fd_info == NULL) {
+        return "<UNKNOWN>";
+    }
+
+    if (fd_info->name[0] == 0 || 
+        fd_info->name[strlen(fd_info->name) - 1] == '/')
+    {
+        return fd_info->name;
+    }
+
+    /**
+     * TODO: should return fd_info->name + '/'
+     */
     return "";
+}
+
+static inline void rewind_to_parent_path(const char* targetbase,
+                                         char** tc,
+                                         char** pc,
+                                         uint32_t delta)
+{
+    if (*tc <= targetbase + 1) {
+        (*pc) += delta;
+        return;
+    }
+
+    (*tc)--;
+
+    while ((*tc) >= targetbase + 1 && *((*tc) - 1) != '/') {
+        (*tc)--;
+    }
+
+    (*pc) += delta;
+}
+
+static int copy_and_sanitize_path(char *target, char *targetbase, char *path, char separator)
+{
+    char *tc = target;
+    char *pc = path;
+    bool empty_base = target == targetbase;
+    int num, tmp_num;
+
+    num = tmp_num = target - targetbase;
+
+    while (true) {
+        if (*pc == 0) {
+            *tc = 0;
+
+            if ((tc > (targetbase + 1)) && *(tc - 1) == separator) {
+                *(tc - 1) = 0;
+            }
+
+            return tmp_num;
+        }
+
+        if (!isprint(*pc)) {
+            *tc = '.';
+            tc++;
+            pc++;
+            num++;
+        } else {
+            if (*pc == '.' && (tc == targetbase || *(tc - 1) == separator)) {
+                if (*(pc + 1) == '.' && *(pc + 2) == separator) {
+                    rewind_to_parent_path(targetbase, &tc, &pc, 3);
+                } else if (*(pc + 1) == '.' && *(pc + 2) == 0) {
+                    rewind_to_parent_path(targetbase, &tc, &pc, 2);
+                } else if (*(pc + 1) == separator) {
+                    pc += 2;
+                } else if (*(pc + 1) == 0) {
+                    pc++;
+                } else {
+                    *tc = *pc;
+                    pc++;
+                    tc++;
+                    num++;
+                }
+            } else if (*pc == separator) {
+                if ((tc > targetbase && *(tc - 1) == separator) ||
+                    (tc == targetbase && !empty_base))
+                {
+                    pc++;
+                } else {
+                    *tc = *pc;
+                    tc++;
+                    pc++;
+                    num++;
+                }
+
+                tmp_num = num;
+            } else {
+                *tc = *pc;
+				tc++;
+				pc++;
+                num++;
+            }
+        }
+    }
+
+    return 0;
+}
+
+static int connect_split_file_name(char *fullpath, size_t path_size, 
+                                   char *sdir, size_t sdir_size,
+                                   char *name, size_t name_size)
+{
+    int num;
+
+    if (!fullpath) {
+        return -1;
+    }
+
+    if (path_size < (name_size + sdir_size)) {
+        strlcpy(fullpath, "/DIR_TOO_LONG/FILENAME_TOO_LONG", path_size);
+        return 13;
+    }
+
+    if (name_size != 0 && name[0] != '/') {
+        memcpy(fullpath, sdir, sdir_size);
+        num = copy_and_sanitize_path(fullpath + sdir_size, fullpath, name, '/');
+    } else {
+        fullpath[0] = 0;
+        num = copy_and_sanitize_path(fullpath, fullpath, name, '/');
+    }
+
+    return num;
+}
+
+static inline void add_socket(linx_event_t *event, int64_t fd, 
+                              uint8_t domain, uint32_t type, 
+                              uint32_t protocol)
+{
+    socktuple_t *tuple;
+    linx_fd_info_t *fd_info;
+    bool need_update = false;
+    linx_proto_type_t l4proto = LINX_PROTO_UNKNOWN;
+
+    fd_info = linx_process_cache_get_fd((pid_t)event->pid, (int64_t)fd);
+    if (!fd_info) {
+        fd_info = calloc(1, sizeof(linx_fd_info_t));
+        if (!fd_info) {
+            return;
+        }
+
+        need_update = true;
+    }
+
+    if (domain == AF_UNIX) {
+        fd_info->type.num = LINX_FD_TYPE_UNIX_SOCK;
+    } else if (domain == AF_INET || domain == AF_INET6) {
+        fd_info->type.num = (domain == AF_INET) ? LINX_FD_TYPE_IPV4_SOCK : LINX_FD_TYPE_IPV6_SOCK;
+
+        if (protocol == IPPROTO_TCP) {
+            l4proto = (type == SOCK_RAW) ? LINX_PROTO_RAW : LINX_PROTO_TCP;
+        } else if (protocol == IPPROTO_UDP) {
+            l4proto = (type == SOCK_RAW) ? LINX_PROTO_RAW : LINX_PROTO_UDP;
+        } else if (protocol == IPPROTO_IP) {
+            if((type & 0xff) == SOCK_STREAM) {
+				l4proto = LINX_PROTO_TCP;
+			} else if((type & 0xff) == SOCK_DGRAM) {
+				l4proto = LINX_PROTO_UDP;
+			} else {
+				return;
+			}
+        } else if (protocol == IPPROTO_ICMP) {
+            l4proto = (type == SOCK_RAW) ? LINX_PROTO_RAW : LINX_PROTO_ICMP;
+        } else if (protocol == IPPROTO_RAW) {
+            l4proto = LINX_PROTO_RAW;
+        }
+
+        fd_info->l4proto = linx_proto_type_string_get(l4proto);
+    } else if (domain == AF_NETLINK) {
+        fd_info->type.num = LINX_FD_TYPE_NETLINK;
+    } else {
+        if (domain != 10 && domain != 17) {
+            fd_info->type.num = LINX_FD_TYPE_UNKNOWN;
+        }
+    }
+
+    fd_info->type.str = linx_fd_type_string_get(fd_info->type.num);
+    fd_info->typechar = linx_fd_type_str_get(fd_info->type.num);
+    fd_info->num = fd;
+
+    tuple = (socktuple_t *)linx_event_get_param(event, 2);
+
+    if (tuple->family == AF_INET) {
+        inet_ntop(tuple->family, &tuple->data.ipv4.ip1, 
+                  fd_info->lip, sizeof(fd_info->lip));
+        inet_ntop(tuple->family, &tuple->data.ipv4.ip2, 
+                  fd_info->rip, sizeof(fd_info->rip));
+        fd_info->ip = fd_info->lip;
+        fd_info->lport = tuple->data.ipv4.port1;
+        fd_info->rport = tuple->data.ipv4.port2;
+        fd_info->port = fd_info->lport;
+    } else if (tuple->family == AF_INET6) {
+        inet_ntop(tuple->family, tuple->data.ipv6.ip1, 
+                  fd_info->lip, sizeof(fd_info->lip));
+        inet_ntop(tuple->family, tuple->data.ipv6.ip2, 
+                  fd_info->rip, sizeof(fd_info->rip));
+        fd_info->ip = fd_info->lip;
+        fd_info->lport = tuple->data.ipv6.port1;
+        fd_info->rport = tuple->data.ipv6.port2;
+        fd_info->port = fd_info->lport;
+    } else if (tuple->family == AF_UNIX) {
+        strncpy(fd_info->name, tuple->data.af_unix.path, sizeof(fd_info->name));
+    }
+
+    if (need_update) {
+        linx_process_cache_update_fd((pid_t)event->pid, fd_info);
+    }
+}
+
+static void infer_sendto_fdinfo(linx_event_t *event)
+{
+    socktuple_t *tuple;
+    int64_t fd = *(int64_t *)linx_event_get_param(event, 0);
+    if (fd < 0) {
+        return;
+    }
+
+    tuple = (socktuple_t *)linx_event_get_param(event, 2);
+
+    add_socket(event, fd, tuple->family, SOCK_DGRAM, IPPROTO_UDP);
 }
 
 static void rich_store_event(linx_event_t *event)
@@ -164,6 +397,8 @@ static void rich_store_event(linx_event_t *event)
     } else {
         linx_process_cache_get_fd(pid, fd);
     }
+
+    memcpy(evt.last_event, event, event->size);
 }
 
 /**
@@ -171,12 +406,19 @@ static void rich_store_event(linx_event_t *event)
  */
 static int64_t rich_open_openat_exit(linx_event_t *event)
 {
-    int64_t dirfd;
+    int size;
+    int64_t fd, dirfd;
     char *name, *sdir;
     bool need_update = false;
     linx_fd_info_t *fd_info;
+    linx_process_info_t *info = linx_process_cache_get((pid_t)event->pid);
 
-    fd_info = linx_process_cache_get_fd((pid_t)event->pid, (int64_t)event->res);
+    fd = (int64_t)event->res;
+    if (fd < 0) {
+        return fd;
+    }
+
+    fd_info = linx_process_cache_get_fd((pid_t)event->pid, fd);
     if (!fd_info) {
         fd_info = calloc(1, sizeof(linx_fd_info_t));
         if (!fd_info) {
@@ -187,26 +429,28 @@ static int64_t rich_open_openat_exit(linx_event_t *event)
     }
 
     if (event->type == LINX_EVENT_TYPE_OPENAT_X) {
-        name = linx_event_get_param(event, 2);
         dirfd = *(int64_t *)linx_event_get_param(event, 1);
+        name = linx_event_get_param(event, 2);
 
         sdir = parse_dirfd(event, name, dirfd);
+    } else {
+        name = linx_event_get_param(event, 1);
+        sdir = info ? info->cwd : NULL;
     }
 
-    snprintf(fd_info->filename, sizeof(fd_info->filename), "%s", name);
-    snprintf(fd_info->directory, sizeof(fd_info->directory), "%s", sdir);
-    if (strlen(sdir)) {
-        snprintf(fd_info->name, sizeof(fd_info->name), "%s/%s", fd_info->directory, fd_info->filename);
-    } else {
-        snprintf(fd_info->name, sizeof(fd_info->name), "%s", fd_info->filename);
-    }
+    fd_info->num = fd;
+    size = connect_split_file_name(fd_info->name, sizeof(fd_info->name), sdir, strlen(sdir), name, strlen(name));
+    snprintf(fd_info->directory, size, "%s", fd_info->name);
+    snprintf(fd_info->filename, strlen(fd_info->name) - size + 1, "%s", fd_info->name + size);
+
+    // printf("pid: %d %d %d comm:%s name:%s\n", info->pid, info->ppid, info->pgid,
+    //     info->name, fd_info->filename);
 
     if (need_update) {
-        fd_info->num = (int64_t)event->res;
         linx_process_cache_update_fd((pid_t)event->pid, fd_info);
     }
 
-    return (int64_t)event->res;
+    return fd;
 }
 
 static void rich_execve_exit(linx_event_t *event)
@@ -238,14 +482,39 @@ static void rich_rw_exit(linx_event_t *event)
     int64_t fd;
     linx_fd_info_t *fd_info;
 
-    if (event->type != LINX_EVENT_TYPE_SENDTO_X) {
+    // res = event->res;
+
+    switch (event->type) {
+    case LINX_EVENT_TYPE_RECVFROM_X:
+    case LINX_EVENT_TYPE_SENDTO_X:
+        fd = *(int64_t *)linx_event_get_param((linx_event_t *)evt.last_event, 0);
+        break;
+    default:
         fd = *(int64_t *)linx_event_get_param(event, 2);
+        break;
     }
 
     fd_info = linx_process_cache_get_fd((pid_t)event->pid, fd);
     if (!fd_info) {
         return;
     }
+
+    /**
+     * TODO: 后续的丰富
+     */
+}
+
+static int64_t rich_dup_exit(linx_event_t *event)
+{
+    int64_t fd = (int64_t)event->res;
+
+    if (fd < 0) {
+        return fd;
+    }
+
+    linx_process_cache_get_fd((pid_t)event->pid, fd);
+
+    return fd;
 }
 
 int linx_event_rich_init(void)
@@ -308,7 +577,8 @@ int linx_event_rich(linx_event_t *event)
     */
     switch (event->type) {
         case LINX_EVENT_TYPE_SENDTO_E:
-
+            infer_sendto_fdinfo(event);
+            /* fall through */
         case LINX_EVENT_TYPE_READ_E:
         case LINX_EVENT_TYPE_OPEN_E:
         case LINX_EVENT_TYPE_OPENAT_E:
@@ -324,7 +594,13 @@ int linx_event_rich(linx_event_t *event)
         case LINX_EVENT_TYPE_READ_X:
         case LINX_EVENT_TYPE_WRITE_X:
         case LINX_EVENT_TYPE_SENDTO_X:
+        case LINX_EVENT_TYPE_RECVFROM_X:
             rich_rw_exit(event);
+            break;
+        case LINX_EVENT_TYPE_DUP_X:
+        case LINX_EVENT_TYPE_DUP2_X:
+        case LINX_EVENT_TYPE_DUP3_X:
+            fd = rich_dup_exit(event);
             break;
         default:
             break;

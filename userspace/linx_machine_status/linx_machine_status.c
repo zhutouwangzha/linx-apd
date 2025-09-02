@@ -11,6 +11,7 @@
 
 static user_t s_user = {0};
 static group_t s_group = {0};
+static ifinfo_list_t s_ifinfo = {0};
 
 static int64_t get_login_uid(void)
 {
@@ -78,6 +79,56 @@ static void get_current_group(group_t *group)
     group->name[sizeof(group->name) - 1] = '\0';
 }
 
+static void get_current_iflist(ifinfo_list_t *ifinfo)
+{
+    FILE *f;
+    int j;
+    char *scan_buf;
+    uint32_t count = 0;
+
+    scan_buf = (char *)calloc(1, 1024);
+    if (scan_buf == NULL) {
+        return;
+    }
+
+    f = fopen("/proc/net/route", "r");
+    if (f == NULL) {
+        free(scan_buf);
+        return;
+    }
+
+    for (int i = 0; fgets(scan_buf, 1024, f) != NULL; ++i) {
+        if (i < 2) {
+            continue;
+        }
+
+        ifinfo->n_v4 += 1;
+        ifinfo->v4list = (ifinfo_ipv4_t *)realloc(ifinfo->v4list, ifinfo->n_v4);
+        if (!ifinfo->v4list) {
+            return;
+        }
+
+        for (j = 0; scan_buf[j] != '\t'; ++j) {
+            ifinfo->v4list[ifinfo->n_v4 - 1].ifname[j] = 
+                scan_buf[j];
+        }
+        ifinfo->v4list[ifinfo->n_v4 - 1].ifname[j + 1] = '\0';
+
+        for (j = 0; j < 8; ++j) {
+            if (scan_buf[j + 36] == 'F') {
+                count += 4;
+            }
+        }
+
+        snprintf(ifinfo->v4list[ifinfo->n_v4 - 1].net_mask, 
+                 sizeof(ifinfo->v4list[ifinfo->n_v4 - 1].net_mask), 
+                 "/%d", count);
+    }
+
+    free(scan_buf);
+    fclose(f);
+}
+
 static int bind_user_field(void)
 {
     int ret;
@@ -136,13 +187,22 @@ int linx_machine_status_init(void)
 
     get_current_user(&s_user);
     get_current_group(&s_group);
+    get_current_iflist(&s_ifinfo);
 
     return ret;
 }
 
 void linx_machine_status_deinit(void)
 {
+    if (s_ifinfo.n_v4) {
+        free(s_ifinfo.v4list);
+        s_ifinfo.v4list = NULL;
+    }
 
+    if (s_ifinfo.n_v6) {
+        free(s_ifinfo.v6list);
+        s_ifinfo.v6list = NULL;
+    }
 }
 
 user_t *linx_machine_status_get_user(void)
@@ -153,4 +213,9 @@ user_t *linx_machine_status_get_user(void)
 group_t *linx_machine_status_get_group(void)
 {
     return &s_group;
+}
+
+ifinfo_list_t *linx_machine_status_get_ifinfo(void)
+{
+    return &s_ifinfo;
 }

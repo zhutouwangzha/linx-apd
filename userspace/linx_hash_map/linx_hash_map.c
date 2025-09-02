@@ -4,6 +4,7 @@
 #include "linx_event_rich.h"
 #include "linx_event_table.h"
 #include "linx_log.h"
+#include "field_struct.h"
 
 static linx_hash_map_t *s_linx_hash_map = NULL;
 
@@ -251,23 +252,33 @@ void *linx_hash_map_get_value_ptr(field_result_t *field, linx_field_type_t *type
         char *endptr;
         long index = strtol(field->arg, &endptr, 10);
 
-        /* 如果不是纯数字，则通过名称查找下标 */
-        if (*endptr != '\0') {
-            for (index = 0; index < g_linx_event_table[*field->event_type].nparams; index++) {
-                if (strcmp(g_linx_event_table[*field->event_type].params[index].name, field->arg) == 0) {
-                    break;
+        if (field->type == LINX_FIELD_TYPE_STRUCT) {
+            /* 如果不是纯数字，则通过名称查找下标 */
+            if (*endptr != '\0') {
+                for (index = 0; index < g_linx_event_table[*field->event_type].nparams; index++) {
+                    if (strcmp(g_linx_event_table[*field->event_type].params[index].name, field->arg) == 0) {
+                        break;
+                    }
                 }
             }
-        }
 
-        if (index >= g_linx_event_table[*field->event_type].nparams) {
-            field->arg_index = -1;
-            return NULL;
-        }
+            if (index >= g_linx_event_table[*field->event_type].nparams) {
+                field->arg_index = -1;
+                return NULL;
+            }
 
-        ptr = (void *)((char *)base_addr + field->offset + index * sizeof(void *));
-        *type = g_linx_event_table[*field->event_type].params[index].type;
-        field->arg_index = index;
+            ptr = (void *)((char *)base_addr + field->offset + index * FIELD_STRUCT_SIZE);
+            *type = g_linx_event_table[*field->event_type].params[index].type;
+            field->arg_index = index;
+        } else {
+            if (*endptr != '\0') {
+
+            }
+
+            ptr = (void *)((char *)base_addr + field->offset + index * sizeof(void *));
+            *type = field->type;
+            field->arg_index = index;
+        }
     } else {
         ptr = (void *)((char *)base_addr + field->offset);
         *type = field->type;

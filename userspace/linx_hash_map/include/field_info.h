@@ -1,7 +1,7 @@
 #ifndef __FIELD_INFO_H__
 #define __FIELD_INFO_H__ 
 
-#include "uthash.h"
+#include "uthash_ext.h"
 
 #include "linx_field_type.h"
 

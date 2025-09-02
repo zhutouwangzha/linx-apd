@@ -1,13 +1,22 @@
-- rule: Passwd File Access by File Open
-  desc: Detect direct file open of sensitive files by known read tools
+- rule: Redirect STDOUT/STDIN to Network Connection
+  desc: >
+    Detect redirection of stdout/stdin to a network connection, achieved by utilizing a
+    variant of the dup syscall (potential reverse shell or remote code execution
+    https://github.com/swisskyrepo/PayloadsAllTheThings/). This detection is behavior-based and may generate
+    noise in the system, and can be adjusted using the user_known_stand_streams_redirect_activities template
+    macro. Tuning can be performed similarly to existing detections based on process lineage or container images,
+    and/or it can be limited to interactive tty (tty != 0).
   condition: >
-    evt.type in (sendto)
-  output: >
-    res = %evt.res dir = %evt.dir num = %evt.num time = %evt.time type = %evt.type %evt.arg[0] %evt.arg[1] %evt.arg[2]
-  priority: WARNING
-  tags: [filesystem, sensitive]
-  notify:
-    title: 敏感文件读取
-    content: 命令行读取/etc/passwd行为，请确认是否为合法操作
-  chdesc: 读取/etc/passwd敏感文件
+    ( evt.type in (dup, dup2, dup3) and 
+      evt.dir = <
+    ) and not (
+      proc.name in (perl, python, python3, php, java)
+    ) and (
+      fd.l4proto = tcp or 
+      fd.l4proto = udp
+    ) and 
+    evt.rawres in (0) and 
+    fd.lport != 22 and 
+    fd.type in ("ipv4", "ipv6")
 
+  output: Redirect stdout/stdin to network connection (pid=%proc.pid ppid=%proc.ppid gparent=%proc.aname[2] ggparent=%proc.aname[3] fd.sip=%fd.sip connection=%fd.name lport=%fd.lport rport=%fd.rport fd_type=%fd.type fd_proto=%fd.l4proto evt_type=%evt.type user=%user.name user_uid=%user.uid user_loginuid=%user.loginuid process=%proc.name proc_exepath=%proc.exepath parent=%proc.pname command=%proc.cmdline terminal=%proc.tty)

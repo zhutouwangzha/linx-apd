@@ -177,11 +177,11 @@
     },
     "sendto": {
       "syscall_id": 44,
-      "interesting": 1
+      "interesting": 0
     },
     "recvfrom": {
       "syscall_id": 45,
-      "interesting": 0
+      "interesting": 1
     },
     "sendmsg": {
       "syscall_id": 46,
@@ -997,7 +997,7 @@
     },
     "openat": {
       "syscall_id": 257,
-      "interesting": 0
+      "interesting": 1
     },
     "mkdirat": {
       "syscall_id": 258,
@@ -1137,7 +1137,7 @@
     },
     "dup3": {
       "syscall_id": 292,
-      "interesting": 0
+      "interesting": 1
     },
     "pipe2": {
       "syscall_id": 293,

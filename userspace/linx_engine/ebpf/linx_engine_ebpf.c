@@ -42,29 +42,11 @@ int ebpf_init(void)
     ret = ret ? : linx_ebpf_ringbuf_init(&s_bpf_manager);
     ret = ret ? : linx_ebpf_load_tail_call_map(s_bpf_manager.skel, 
                                                config->engine.data.ebpf.interest_syscall_table);
+    ret = ret ? : linx_ebpf_final_maps_after_load(s_bpf_manager.skel);
     ret = ret ? : linx_ebpf_probe_load(s_bpf_manager.skel);
     ret = ret ? : linx_get_boot_time(&boot_time);
 
     linx_ebpf_set_boot_time(s_bpf_manager.skel, boot_time);
-
-    linx_ebpf_set_filter_pids(s_bpf_manager.skel, 
-                              config->engine.data.ebpf.filter_pids);
-
-    linx_ebpf_set_filter_comms(s_bpf_manager.skel, 
-                               config->engine.data.ebpf.filter_comms);
-
-    linx_ebpf_set_drop_mode(s_bpf_manager.skel, 
-                            config->engine.data.ebpf.drop_mode);
-
-    linx_ebpf_set_drop_failed(s_bpf_manager.skel, 
-                              config->engine.data.ebpf.drop_failed);
-
-    linx_ebpf_set_snaplen(s_bpf_manager.skel, config->snaplen);
-
-    linx_ebpf_set_do_snaplen(s_bpf_manager.skel, true);
-
-    linx_ebpf_set_interesting_syscalls_table(s_bpf_manager.skel, 
-                                             config->engine.data.ebpf.interest_syscall_table);
 
     return ret;
 }

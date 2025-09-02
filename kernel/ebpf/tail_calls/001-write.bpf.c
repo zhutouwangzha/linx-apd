@@ -34,12 +34,17 @@ int BPF_PROG(write_x, struct pt_regs *regs, long ret)
 
     linx_ringbuf_store_s64(ringbuf, ret);
 
+    snaplen_args_t snaplen_args = {
+        .only_port_range = false,
+        .type = LINX_EVENT_TYPE_WRITE_X,
+    };
     size_t size = (size_t)get_pt_regs_argumnet(regs, 2);
-    // int64_t bytes_to_read = ret > 0 ? ret : size;
-    uint16_t snaplen = 512;
-    // if ((int64_t)snaplen > bytes_to_read) {
-    //     snaplen = bytes_to_read;
-    // }
+    int64_t bytes_to_read = ret > 0 ? ret : size;
+    uint16_t snaplen = maps_get_snaplen();
+    apply_snaplen(regs, &snaplen, &snaplen_args);
+    if ((int64_t)snaplen > bytes_to_read) {
+        snaplen = bytes_to_read;
+    }
 
     unsigned long data_pointer = get_pt_regs_argumnet(regs, 1);
     linx_ringbuf_store_bytebuf(ringbuf, data_pointer, snaplen, USER);

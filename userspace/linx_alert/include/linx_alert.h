@@ -7,6 +7,7 @@
 
 #include "linx_thread_pool.h"
 #include "linx_rule_engine_match.h"
+#include "linx_rule_engine_load.h"
 
 typedef enum {
     LINX_ALERT_TYPE_STDOUT,
@@ -43,8 +44,7 @@ typedef struct {
     char *message;
     size_t message_len;
     linx_alert_config_t config[LINX_ALERT_TYPE_MAX];
-    char *rule_name;
-    int priority;
+    linx_rule_t *rule;
 } linx_alert_message_t;
 
 typedef struct {
@@ -67,11 +67,11 @@ int linx_alert_set_config_enable(linx_alert_type_t type, bool enable);
 int linx_alert_update_config(linx_alert_config_t config);
 
 /* 核心输出函数 */
-int linx_alert_send_async(linx_output_match_t *output, const char *rule_name, int priority);
-int linx_alert_send_sync(linx_output_match_t *output, const char *rule_name, int priority);
+int linx_alert_send_async(linx_output_match_t *output, linx_rule_t *rule);
+int linx_alert_send_sync(linx_output_match_t *output, linx_rule_t *rule);
 
 /* 格式化和发送函数 */
-int linx_alert_format_and_send(linx_output_match_t *output, const char *rule_name, int priority);
+int linx_alert_format_and_send(linx_output_match_t *output, linx_rule_t *rule);
 
 /* 统计信息函数 */
 void linx_alert_get_stats(long *total_send, long *total_fail);
@@ -83,7 +83,7 @@ int linx_alert_output_http(linx_alert_message_t *message, linx_alert_config_t *c
 int linx_alert_output_syslog(linx_alert_message_t *message, linx_alert_config_t *config);
 
 /* 辅助函数 */
-linx_alert_message_t *linx_alert_message_create(const char *message, const char *rule_name, int priority);
+linx_alert_message_t *linx_alert_message_create(const char *message, linx_rule_t *rule);
 void linx_alert_message_destroy(linx_alert_message_t *message);
 
 #endif /* __LINX_ALERT_H__ */

@@ -8,8 +8,7 @@ static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va
 {
     (void)level;
 
-    // LINX_LOG_DEBUG_V(format, args);
-    vfprintf(stderr, format, args);
+    LINX_LOG_DEBUG_V(format, args);
 
     return 0;
 }

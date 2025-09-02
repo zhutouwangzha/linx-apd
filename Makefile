@@ -29,6 +29,7 @@ INCLUDE := -I$(TOPDIR)/include -I$(USR_DIR)/linx_arg_parser/include \
 			-I$(USR_DIR)/linx_apd/include/ \
 			-I$(USR_DIR)/linx_hash_map/include \
 			-I$(USR_DIR)/linx_machine_status/include/ \
+			-I$(USR_DIR)/linx_control/include \
 			-I$(DEPENDS_DIR)/uthash/include
 
 CFLAGS 	:= -Wall -Wextra -g $(INCLUDE) \

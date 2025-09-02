@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <sys/time.h>
+#include <errno.h>
 #include <sched.h>
 
 #include "linx_log.h"
@@ -56,20 +56,17 @@ static linx_log_level_t linx_log_level_str_to_level(const char *level_str)
  */
 static void linx_log_queue_push(linx_log_message_t *message)
 {
-    int new_capacity;
-    linx_log_message_t **new_queue;
-
     /* 获取互斥锁保护共享资源 */
     pthread_mutex_lock(&g_linx_log_instance->lock);
 
     /* 检查队列容量，必要时进行扩展 */
     if (g_linx_log_instance->queue_size >= g_linx_log_instance->queue_capacity) {
         /* 计算新容量：初始为16，之后每次翻倍 */
-        new_capacity = g_linx_log_instance->queue_capacity == 0 
+        int new_capacity = g_linx_log_instance->queue_capacity == 0 
                         ? 16 : g_linx_log_instance->queue_capacity * 2;
         
         /* 尝试扩展队列内存 */
-        new_queue = realloc(g_linx_log_instance->queue, sizeof(linx_log_message_t *) * new_capacity);
+        linx_log_message_t** new_queue = malloc(sizeof(linx_log_message_t *) * new_capacity);
         if (!new_queue) {
             /* 内存分配失败处理：释放消息并返回 */
             fprintf(stderr, "Failed to expand log queue\n");
@@ -79,15 +76,28 @@ static void linx_log_queue_push(linx_log_message_t *message)
             return;
         }
 
+        /* 重新排列元素到新队列 */
+        for (int i = 0; i < g_linx_log_instance->queue_size; ++i) {
+            new_queue[i] = g_linx_log_instance->queue[
+                (g_linx_log_instance->head + i) % g_linx_log_instance->queue_capacity];
+        }
+
         /* 更新队列指针和容量 */
+        free(g_linx_log_instance->queue);
         g_linx_log_instance->queue = new_queue;
         g_linx_log_instance->queue_capacity = new_capacity;
+        g_linx_log_instance->head = 0;
+        g_linx_log_instance->tail = g_linx_log_instance->queue_size;
     }
 
     /* 消息入队 */
-    g_linx_log_instance->queue[g_linx_log_instance->queue_size++] = message;
+    g_linx_log_instance->queue[g_linx_log_instance->tail] = message;
+    g_linx_log_instance->tail = (g_linx_log_instance->tail + 1) % 
+                                g_linx_log_instance->queue_capacity;
+    g_linx_log_instance->queue_size++;
 
     /* 释放互斥锁 */
+    pthread_cond_signal(&g_linx_log_instance->not_empty);
     pthread_mutex_unlock(&g_linx_log_instance->lock);
 }
 
@@ -100,29 +110,41 @@ static void linx_log_queue_push(linx_log_message_t *message)
  * @return 成功时返回 linx_log_message_t* 类型的消息指针；
  *         如果队列为空则返回NULL
  */
-static linx_log_message_t *linx_log_queue_pop(void)
+static linx_log_message_t *linx_log_queue_pop_timeout(int *should_stop)
 {
     linx_log_message_t *msg;
+    struct timespec timeout;
+    int ret;
 
-    /* 加锁确保线程安全 */
     pthread_mutex_lock(&g_linx_log_instance->lock);
 
-    /* 检查队列是否为空 */
-    if (g_linx_log_instance->queue_size == 0) {
-        pthread_mutex_unlock(&g_linx_log_instance->lock);
-        return NULL;
+    while (g_linx_log_instance->queue_size == 0) {
+        if (*should_stop) {
+            pthread_mutex_unlock(&g_linx_log_instance->lock);
+            return NULL;
+        }
+
+        clock_gettime(CLOCK_REALTIME, &timeout);
+        timeout.tv_nsec += 100000000;               /* 100ms */
+        if (timeout.tv_nsec >= 100000000) {
+            timeout.tv_sec += 1;
+            timeout.tv_nsec -= 100000000;
+        }
+
+        ret = pthread_cond_timedwait(&g_linx_log_instance->not_empty,
+                                     &g_linx_log_instance->lock,
+                                    &timeout);
+        if (ret == ETIMEDOUT) {
+            continue;
+        } else if (ret != 0) {
+            pthread_mutex_unlock(&g_linx_log_instance->lock);
+            return NULL;
+        }
     }
 
-    /* 获取队列首元素（FIFO） */
-    msg = g_linx_log_instance->queue[0];
-    
-    /* 将后续元素前移一位实现出队操作 */
-    for (int i = 1; i < g_linx_log_instance->queue_size; ++i) {
-        g_linx_log_instance->queue[i - 1] =
-            g_linx_log_instance->queue[i];
-    }
-
-    /* 更新队列大小 */
+    msg = g_linx_log_instance->queue[g_linx_log_instance->head];
+    g_linx_log_instance->head = (g_linx_log_instance->head + 1) % 
+                                g_linx_log_instance->queue_capacity;
     g_linx_log_instance->queue_size--;
 
     /* 解锁 */
@@ -155,7 +177,7 @@ static void *linx_log_thread(void *arg, int *should_stop)
         struct tm *tm_info;
 
         /* 从队列获取下一条日志消息 */
-        msg = linx_log_queue_pop();
+        msg = linx_log_queue_pop_timeout(should_stop);
 
         /* 检查停止条件：
          * 2 = 立即停止
@@ -165,8 +187,9 @@ static void *linx_log_thread(void *arg, int *should_stop)
             break;
         } else if (*should_stop == 1 && msg == NULL) {
             break;
-        } else if (msg == NULL) {
-            sched_yield();
+        }
+
+        if (msg == NULL) {
             continue;
         }
 
@@ -186,7 +209,7 @@ static void *linx_log_thread(void *arg, int *should_stop)
         free(msg->message);
         free(msg);
     }
-    
+
     return NULL;
 }
 
@@ -235,6 +258,13 @@ int linx_log_init(const char *log_file, const char *log_level)
         return -1;
     }
 
+    // 初始化非空信号量
+    if (pthread_cond_init(&g_linx_log_instance->not_empty, NULL) != 0) {
+        pthread_mutex_destroy(&g_linx_log_instance->lock);
+        free(g_linx_log_instance);
+        return -1;
+    }
+
     // 设置日志输出目标
     if (log_file != NULL) {
         if (strcmp(log_file, "stderr") == 0) {
@@ -256,6 +286,8 @@ int linx_log_init(const char *log_file, const char *log_level)
     g_linx_log_instance->queue = NULL;
     g_linx_log_instance->queue_capacity = 0;
     g_linx_log_instance->queue_size = 0;
+    g_linx_log_instance->head = 0;
+    g_linx_log_instance->tail = 0;
 
     // 创建单线程的日志线程池
     g_linx_log_instance->thread_pool = linx_thread_pool_create(1);
@@ -313,6 +345,9 @@ void linx_log_deinit(void)
     /* 销毁用于线程同步的互斥锁 */
     pthread_mutex_destroy(&g_linx_log_instance->lock);
 
+    /* 销毁非空条件变量 */
+    pthread_cond_destroy(&g_linx_log_instance->not_empty);
+
     /* 释放日志队列内存 */
     free(g_linx_log_instance->queue);
     g_linx_log_instance->queue = NULL;
@@ -364,27 +399,11 @@ void linx_log(linx_log_level_t level, const char *file, int line, const char *fo
 void linx_log_v(linx_log_level_t level, const char *file, int line, const char *format, va_list args)
 {
     linx_log_message_t *msg;
-    char msg_buf[1024];
-    int len;
+    int len, msg_size;
+    va_list args_copy;
 
     /* 检查当前日志级别是否低于配置的全局日志级别，如果是则直接返回 */
     if (level < g_linx_log_instance->level) {
-        return;
-    }
-
-    /* 构建日志消息前缀，包含文件名和行号信息 */
-    len = snprintf(msg_buf, sizeof(msg_buf), "[%s:%d]: ",
-                   file, line);
-    /* 检查前缀构建是否成功，防止缓冲区溢出 */
-    if (len < 0 || len >= (int)sizeof(msg_buf)) {
-        return;
-    }
-
-    /* 将可变参数格式化到消息缓冲区中 */
-    len = vsnprintf(msg_buf + len, sizeof(msg_buf) - len,
-                    format, args);
-    /* 检查格式化是否成功 */
-    if (len < 0) {
         return;
     }
 
@@ -394,12 +413,34 @@ void linx_log_v(linx_log_level_t level, const char *file, int line, const char *
         return;
     }
 
+    va_copy(args_copy, args);
+    msg_size = vsnprintf(NULL, 0, format, args_copy) + 1;
+    va_end(args_copy);
+
     /* 填充日志消息结构体字段 */
     gettimeofday(&msg->tv, NULL);
     msg->level = level;
-    msg->message = strdup(msg_buf);
+    msg->message = malloc(msg_size);
     /* 检查消息字符串复制是否成功 */
     if (!msg->message) {
+        free(msg);
+        return;
+    }
+
+    /* 构建日志消息前缀，包含文件名和行号信息 */
+    len = snprintf(msg->message, msg_size, "[%s:%d]: ", file, line);
+    /* 检查前缀构建是否成功，防止缓冲区溢出 */
+    if (len < 0 || len > msg_size) {
+        free(msg->message);
+        free(msg);
+        return;
+    }
+
+    /* 将可变参数格式化到消息缓冲区中 */
+    len = vsnprintf(msg->message + len, msg_size - len, format, args);
+    /* 检查格式化是否成功 */
+    if (len < 0) {
+        free(msg->message);
         free(msg);
         return;
     }

@@ -63,10 +63,6 @@ int BPF_PROG(sendto_x, struct pt_regs *regs, long ret)
         snaplen = bytes_to_read;
     }
 
-    if (snaplen + ringbuf->payload_pos >= LINX_EVENT_MAX_SIZE) {
-        snaplen = (LINX_EVENT_MAX_SIZE - ringbuf->payload_pos - 1);
-    }
-
     /* data */
     unsigned long sent_data_pointer = args[1];
     linx_ringbuf_store_bytebuf(ringbuf, sent_data_pointer, snaplen, USER);

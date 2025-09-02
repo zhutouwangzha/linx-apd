@@ -55,17 +55,6 @@ typedef struct {
 #define FIELD_OFFSET(struct_type, field) offsetof(struct_type, field)
 
 /**
- * 初始化字段映射
-*/
-#define FILED_MAPPING(struct_type, field, field_type)   \
-    {                                                   \
-        .field_name = #field,                           \
-        .offset = FIELD_OFFSET(struct_type, field),     \
-        .size = sizeof(((struct_type *)0)->field),      \
-        .type = field_type                              \
-    }
-
-/**
  * 添加字段映射
 */
 #define ADD_FILED_TO_TABLE(table_id, struct_type, field, field_type)    \
@@ -80,8 +69,21 @@ typedef struct {
 #define BEGIN_FIELD_MAPPINGS(table_id) \
     static field_mapping_t table_id##_mappings[] = {
 
-#define FIELD_MAP(struct_type, field, field_type) \
-    FILED_MAPPING(struct_type, field, field_type),
+#define FIELD_MAP(struct_type, field, field_type)       \
+    {                                                   \
+        .field_name = #field,                           \
+        .offset = FIELD_OFFSET(struct_type, field),     \
+        .size = sizeof(((struct_type *)0)->field),      \
+        .type = field_type                              \
+    },
+
+#define FIELD_MAP2(struct_type, field, name, field_type)    \
+    {                                                       \
+        .field_name = #field,                               \
+        .offset = FIELD_OFFSET(struct_type, name),          \
+        .size = sizeof(((struct_type *)0)->name),           \
+        .type = field_type                                  \
+    },
 
 #define END_FIELD_MAPPINGS(table_id) \
     };  \

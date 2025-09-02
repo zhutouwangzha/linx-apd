@@ -14,9 +14,6 @@
 #include "linx_process_cache.h"
 #include "linx_hash_map.h"
 
-#define HASH_FIND_INT64(head, findint, out) HASH_FIND(hh, head, findint, sizeof(uint64_t), out)
-#define HASH_ADD_INT64(head, intfield, add) HASH_ADD(hh, head, intfield, sizeof(uint64_t), add)
-
 static linx_process_cache_t *g_process_cache = NULL;
 
 static int linx_process_cache_bind_field(void)
@@ -39,6 +36,8 @@ static int linx_process_cache_bind_field(void)
         FIELD_MAP(linx_process_info_t, exepath, LINX_FIELD_TYPE_CHARBUF)
         FIELD_MAP(linx_process_info_t, cwd, LINX_FIELD_TYPE_CHARBUF)
         FIELD_MAP(linx_process_info_t, args, LINX_FIELD_TYPE_CHARBUF)
+        FIELD_MAP2(linx_process_info_t, pname, aname[1], LINX_FIELD_TYPE_CHARBUF_ARRAY)
+        FIELD_MAP(linx_process_info_t, aname, LINX_FIELD_TYPE_CHARBUF_PAIR_ARRAY)
     END_FIELD_MAPPINGS(proc)
 
     ret = linx_hash_map_add_field_batch("proc", proc_mappings, proc_mappings_count);
@@ -217,6 +216,17 @@ static int read_proc_cmdline(pid_t pid, linx_process_info_t *info)
         }
     }
 
+    char *tmp = strrchr(info->exe, '/');
+    if (tmp) {
+        tmp += 1;
+    } else {
+        tmp = info->exe;
+    }
+
+    if (strcmp(info->name, tmp)) {
+        strcpy(info->name, tmp);
+    }
+
     size_t cmdline_pos = strlen(info->cmdline);
     size_t args_pos = 0;
 
@@ -279,7 +289,8 @@ static int read_proc_cwd(pid_t pid, linx_process_info_t *info)
     snprintf(path, sizeof(path), "/proc/%d/cwd", pid);
     len = readlink(path, info->cwd, PROC_PATH_MAX_LEN - 1);
     if (len > 0) {
-        info->cwd[len] = '\0';
+        info->cwd[len] = '/';
+        info->cwd[len + 1] = '\0';
     } else {
         info->cwd[0] = '\0';
     }
@@ -332,6 +343,24 @@ static int read_proc_fd_info(pid_t pid, linx_process_info_t *info)
     return 0;
 }
 
+static void read_ancestor_info(linx_process_info_t *info)
+{
+    linx_process_info_t *a_info = info;
+
+    info->aname[0] = info->name;
+    info->apid[0] = info->pid;
+
+    for (int i = 1; i < 5; ++i) {
+        a_info = linx_process_cache_get(a_info->ppid);
+        if (a_info == NULL) {
+            break;
+        }
+
+        info->aname[i] = a_info->name;
+        info->apid[i] = a_info->pid;
+    }
+}
+
 static linx_process_info_t *create_process_info(pid_t pid)
 {
     linx_process_info_t *info = calloc(1, sizeof(linx_process_info_t));
@@ -369,6 +398,8 @@ static linx_process_info_t *create_process_info(pid_t pid)
     read_proc_loginuid(pid, info);
 
     read_proc_fd_info(pid, info);
+
+    read_ancestor_info(info);
 
     return info;
 }
@@ -753,6 +784,8 @@ int linx_process_cache_update(linx_process_info_t *info)
     if (!info) {
         return -1;
     }
+
+    read_ancestor_info(info);
 
     pid = info->pid;
 

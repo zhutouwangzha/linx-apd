@@ -1476,7 +1476,10 @@ int linx_yaml_get_bool(linx_yaml_node_t *root, const char *path, int default_val
 | dup3     |          |          |
 
 
-proc.pname proc.aname 等等字段目前没有很好的办法做
-因为其要采集的是父进程或特定祖先进程的数据
+## 可优化点
 
-内核能读很多出来，但是在输出时，使用了固定的buffer长度，这样就导致输出时被截断了，需要解决
+1. 事件队列模块
+2. 匹配使用多线程
+3. 规则分类，从事件、优先级、tag分类
+4. 内存分配频繁，需要单独的内存管理模块？
+5. 其余模块优化？

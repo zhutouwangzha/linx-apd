@@ -14,9 +14,9 @@ typedef enum {
     LINX_FIELD_TYPE_FLAGS8,                 /* uint8 */
     LINX_FIELD_TYPE_FLAGS16,                /* uint16 */
     LINX_FIELD_TYPE_FLAGS32,                /* uint32 */
-    LINX_FIELD_TYPE_CHARBUF,                /* 可打印的字符串，数组 */
-    LINX_FIELD_TYPE_BYTEBUF,                /* 二进制数据，不方便打印 */
-    LINX_FIELD_TYPE_CHARBUF_ARRAY,          /* 可打印的字符串指针 */
+    LINX_FIELD_TYPE_CHARBUF,                /* 字符串数组 */
+    LINX_FIELD_TYPE_BYTEBUF,                /* 二进制数据数组，不方便打印 */
+    LINX_FIELD_TYPE_CHARBUF_ARRAY,          /* 字符串指针 */
     LINX_FIELD_TYPE_CHARBUF_PAIR_ARRAY,     /* 字符串数组指针*/
     LINX_FIELD_TYPE_BYTEBUF_ARRAY,          /* 二进制数据指针 */
     LINX_FIELD_TYPE_BOOL,
@@ -24,7 +24,13 @@ typedef enum {
     LINX_FIELD_TYPE_DOUBLE,
     LINX_FIELD_TYPE_UID,                    /* uint32 */
     LINX_FIELD_TYPE_PID,                    /* int64 */
-    LINX_FIELD_TYPE_SOCKTUPLE,
+    LINX_FIELD_TYPE_SOCKTUPLE,              /* 网络地址组，1byte family + 12byte data + 12byte data */
+    LINX_FIELD_TYPE_PORT,                   /* 2byte(uint16_t) */
+    LINX_FIELD_TYPE_SOCKFAMILY,             /* 1byte */
+    LINX_FIELD_TYPE_IPV4NET,                /*  */
+    LINX_FIELD_TYPE_IPV4ADDR,               /* 4byte IPv4 address */
+    LINX_FIELD_TYPE_IPV6NET,                /*  */
+    LINX_FIELD_TYPE_IPV6ADDR,               /* 16byte IPv4 address */
     LINX_FIELD_TYPE_STRUCT,                 /* 结构体指针，用于带参数的字段解析 */
     LINX_FIELD_TYPE_MAX
 } linx_field_type_t;

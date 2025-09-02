@@ -4,16 +4,19 @@
 #include <sys/types.h>
 #include <stdbool.h>
 
-#include "uthash.h"
+#include "uthash_ext.h"
 
 #include "linx_process_cache_define.h"
 #include "linx_process_state.h"
 #include "linx_fd_info.h"
+#include "field_struct.h"
 
 typedef struct {
     pid_t pid;                              /* 进程ID */
     pid_t ppid;                             /* 父进程ID */
     pid_t pgid;                             /* 进程组ID */
+    pid_t apid[5];
+
     uint32_t sid;                           /* 会话ID */
     uint32_t uid;                           /* 用户ID */
     uint32_t gid;                           /* 组ID */
@@ -27,6 +30,8 @@ typedef struct {
     char exepath[PROC_PATH_MAX_LEN];        /* 进程的完整可执行路径 读取 /proc/pid/exe */
     char cwd[PROC_PATH_MAX_LEN];            /* 当前工作目录 */
     char args[4096];                        /*  不包括argv[0] */
+
+    char *aname[5];                         /* 祖先进程名称，上限为3，0指向自己 */
 
     linx_fd_info_t *fdlist;                 /* 当前进程对应的文件列表 */
 
