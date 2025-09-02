@@ -1,11 +1,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/sysinfo.h>
+#include <unistd.h>
 
+#include "linx_event_processor.h"
 #include "linx_event_processor_task.h"
 #include "linx_log.h"
 #include "linx_event.h"
 #include "linx_rule_engine_set.h"
+#include "linx_engine.h"
 
 static linx_event_processor_t *g_event_processor = NULL;
 
@@ -26,7 +29,7 @@ static int linx_event_processor_validate_config(linx_event_processor_config_t *c
         return -1;
     }
 
-    if (config->matcher_thread_count < LINX_EVENT_PROCESSOR_MIN_THREADS ||)
+    if (config->matcher_thread_count < LINX_EVENT_PROCESSOR_MIN_THREADS ||
         config->matcher_thread_count > LINX_EVENT_PROCESSOR_MAX_THREADS)
     {
         return -1;
@@ -55,9 +58,17 @@ static void *event_match_worker(void *arg, int *should_stop)
 {
     linx_event_processor_task_t *task = (linx_event_processor_task_t *)arg;
     linx_event_processor_t *processor = task->processor;
+    linx_event_t *event = task->event;
+    int64_t fd = task->fd;
     
+    if (*should_stop) {
+        goto cleanup;
+    }
+    
+    /* 执行规则匹配 */
     linx_rule_set_match_rule();
-
+    
+cleanup:
     free(task);
     return NULL;
 }
@@ -85,9 +96,11 @@ static void *event_fetch_worker(void *arg, int *should_stop)
 
         match_task->type = LINX_TASK_TYPE_MATCH_EVENT;
         match_task->processor = processor;
+        match_task->event = event;
+        match_task->fd = -1;  /* 默认fd值 */
         match_task->worker_id = task->worker_id;
 
-        ret = linx_thread_pool_add_task(processor->matcher_pool, event_mathc_worker, match_task);
+        ret = linx_thread_pool_add_task(processor->matcher_pool, event_match_worker, match_task);
         if (ret) {
             LINX_LOG_WARNING("Failed to add task to matcher pool");
             free(match_task);
@@ -198,4 +211,42 @@ int linx_event_processor_stop(void)
     }
 
     return 0;
+}
+
+int linx_event_processor_process_event(linx_event_t *event, int64_t fd)
+{
+    linx_event_processor_task_t *match_task;
+    int ret;
+
+    if (!g_event_processor || !event) {
+        return -1;
+    }
+
+    /* 创建匹配任务 */
+    match_task = malloc(sizeof(linx_event_processor_task_t));
+    if (!match_task) {
+        LINX_LOG_WARNING("Failed to allocate memory for match task");
+        return -1;
+    }
+
+    match_task->type = LINX_TASK_TYPE_MATCH_EVENT;
+    match_task->processor = g_event_processor;
+    match_task->event = event;
+    match_task->fd = fd;
+    match_task->worker_id = 0;
+
+    /* 提交到匹配线程池 */
+    ret = linx_thread_pool_add_task(g_event_processor->matcher_pool, event_match_worker, match_task);
+    if (ret) {
+        LINX_LOG_WARNING("Failed to add task to matcher pool");
+        free(match_task);
+        return -1;
+    }
+
+    return 0;
+}
+
+linx_event_processor_t *linx_event_processor_get(void)
+{
+    return g_event_processor;
 }

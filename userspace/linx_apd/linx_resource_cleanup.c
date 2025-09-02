@@ -17,6 +17,8 @@
 #include "linx_process_cache.h"
 #include "linx_machine_status.h"
 #include "linx_control.h"
+#include "linx_event_processor.h"
+#include "linx_apd_config.h"
 
 static linx_resource_cleanup_type_t linx_resource_cleanup_type = LINX_RESOURCE_CLEANUP_ERROR;
 
@@ -32,7 +34,8 @@ void linx_resource_cleanup(void)
         linx_engine_cleanup();
         /* fall through */
     case LINX_RESOURCE_CLEANUP_RULE_ENGINE:
-        linx_rule_match_mt_deinit();  /* 清理多线程规则匹配 */
+        linx_event_processor_deinit();  /* 清理事件处理器 */
+        linx_rule_match_mt_deinit();    /* 清理多线程规则匹配 */
         linx_rule_set_deinit();
         /* fall through */
     case LINX_RESOURCE_CLEANUP_ALERT:
@@ -61,6 +64,7 @@ void linx_resource_cleanup(void)
         /* fall through */
     case LINX_RESOURCE_CLEANUP_CONFIG:
         linx_config_deinit();
+        linx_apd_config_deinit();
         /* fall through */
     case LINX_RESOURCE_CLEANUP_ARGS:
         linx_arg_deinit();
