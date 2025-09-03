@@ -2,6 +2,7 @@
 
 #include "output_match_func.h"
 #include "linx_hash_map.h"
+#include "linx_hash_map_thread_safe.h"
 #include "linx_field_type.h"
 #include "field_struct.h"
 
@@ -192,7 +193,7 @@ size_t format_field_value(field_result_t *field, char *buffer, size_t buffer_siz
     size_t field_str_len = 0;
     char field_str[256] = {0};
     linx_field_type_t type;
-    void *value_ptr = linx_hash_map_get_value_ptr(field, &type);
+    void *value_ptr = linx_hash_map_get_value_ptr_thread_safe(field, &type);
 
     // 如果字段未找到或值指针为空，直接返回0
     if (!field->found || value_ptr == NULL) {
