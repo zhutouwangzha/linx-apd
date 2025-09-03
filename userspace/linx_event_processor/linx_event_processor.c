@@ -6,6 +6,8 @@
 #include "linx_log.h"
 #include "linx_event.h"
 #include "linx_rule_engine_set.h"
+#include "linx_rule_engine_set_thread_safe.h"
+#include "linx_hash_map_thread_safe.h"
 
 static linx_event_processor_t *g_event_processor = NULL;
 
@@ -26,7 +28,7 @@ static int linx_event_processor_validate_config(linx_event_processor_config_t *c
         return -1;
     }
 
-    if (config->matcher_thread_count < LINX_EVENT_PROCESSOR_MIN_THREADS ||)
+    if (config->matcher_thread_count < LINX_EVENT_PROCESSOR_MIN_THREADS ||
         config->matcher_thread_count > LINX_EVENT_PROCESSOR_MAX_THREADS)
     {
         return -1;
@@ -56,7 +58,8 @@ static void *event_match_worker(void *arg, int *should_stop)
     linx_event_processor_task_t *task = (linx_event_processor_task_t *)arg;
     linx_event_processor_t *processor = task->processor;
     
-    linx_rule_set_match_rule();
+    /* 使用线程安全的规则匹配 */
+    linx_rule_set_match_rule_thread_safe();
 
     free(task);
     return NULL;
@@ -87,7 +90,7 @@ static void *event_fetch_worker(void *arg, int *should_stop)
         match_task->processor = processor;
         match_task->worker_id = task->worker_id;
 
-        ret = linx_thread_pool_add_task(processor->matcher_pool, event_mathc_worker, match_task);
+        ret = linx_thread_pool_add_task(processor->matcher_pool, event_match_worker, match_task);
         if (ret) {
             LINX_LOG_WARNING("Failed to add task to matcher pool");
             free(match_task);

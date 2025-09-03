@@ -1,0 +1,32 @@
+# 线程安全版本的Makefile
+CC = gcc
+CFLAGS = -Wall -Wextra -O2 -fPIC -pthread
+INCLUDES = -I./include -I../linx_log/include -I../linx_event_rich/include -I../../include
+LDFLAGS = -shared -pthread
+
+SRCDIR = .
+OBJDIR = obj
+SOURCES = linx_hash_map.c linx_hash_map_thread_safe.c
+OBJECTS = $(SOURCES:%.c=$(OBJDIR)/%.o)
+TARGET = liblinx_hash_map_thread_safe.so
+
+.PHONY: all clean
+
+all: $(TARGET)
+
+$(TARGET): $(OBJECTS)
+	$(CC) $(LDFLAGS) -o $@ $^
+
+$(OBJDIR)/%.o: $(SRCDIR)/%.c | $(OBJDIR)
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJDIR):
+	mkdir -p $(OBJDIR)
+
+clean:
+	rm -rf $(OBJDIR) $(TARGET)
+
+install: $(TARGET)
+	cp $(TARGET) /usr/local/lib/
+	cp include/linx_hash_map_thread_safe.h /usr/local/include/
+	ldconfig
