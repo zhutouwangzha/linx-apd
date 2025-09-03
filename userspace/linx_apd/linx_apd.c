@@ -3,7 +3,6 @@
 
 #include "linx_log.h"
 #include "linx_alert.h"
-#include "linx_config.h"
 #include "linx_signal.h"
 #include "linx_thread_pool.h"
 #include "linx_event_table.h"
@@ -15,19 +14,19 @@
 #include "linx_rule_engine_match.h"
 #include "linx_rule_engine_set.h"
 #include "rule_match_mt.h"
-#include "linx_config.h"
 #include "linx_resource_cleanup.h"
-#include "linx_event_queue.h"
 #include "linx_event.h"
 #include "linx_process_cache.h"
 #include "linx_machine_status.h"
 #include "linx_control.h"
+#include "linx_event_processor.h"
+#include "linx_apd_config.h"  /* APD内部配置 */
 
 static int linx_event_loop(void)
 {
     int ret = 0;
     linx_event_t *event = NULL;
-    linx_config_t *config = linx_get_config();
+    linx_apd_config_t *apd_config = linx_apd_config_get();
     int64_t fd = -1;  /* 默认fd值 */
 
     ret = linx_engine_start();
@@ -51,12 +50,25 @@ static int linx_event_loop(void)
             /* 非致命错误 */
         }
 
-        /* 根据配置选择单线程或多线程规则匹配 */
-        if (config && config->mt_config.enable_mt_match) {
-            ret = linx_rule_set_match_rule_mt(event, fd);
+        /* 根据配置选择匹配模式 */
+        bool match_found = false;
+        if (apd_config && apd_config->mt_config.enable_mt_match) {
+            /* 检查是否使用事件处理器 */
+            linx_event_processor_t *processor = linx_event_processor_get();
+            if (processor) {
+                /* 使用事件处理器进行多线程规则匹配 */
+                match_found = linx_event_processor_process_event(event, fd);
+            } else {
+                /* 使用原有的多线程匹配 */
+                match_found = linx_rule_set_match_rule_mt(event, fd);
+            }
         } else {
-            ret = linx_rule_set_match_rule();
+            /* 单线程模式 */
+            match_found = linx_rule_set_match_rule();
         }
+        
+        /* 转换为原来的ret逻辑 */
+        ret = match_found ? 1 : 0;
         
         if (ret) {
             /* 匹配成功 */
@@ -97,8 +109,15 @@ int main(int argc, char *argv[])
         linx_arg_config = linx_arg_get_config();
     }
 
+    /* 初始化APD内部配置（多线程等） */
+    ret = linx_apd_config_init();
+    if (ret) {
+        fprintf(stderr, "linx_apd_config_init failed\n");
+        goto out;
+    }
+    
     /* yaml 配置加载 */
-    ret = linx_config_init();
+    ret = linx_config_init();  /* 这是linx_config模块的初始化 */
     if (ret) {
         fprintf(stderr, "linx_config_init failed\n");
         goto out;
@@ -202,16 +221,29 @@ int main(int argc, char *argv[])
     }
     
     /* 初始化多线程规则匹配（如果启用） */
-    linx_config_t *config = linx_get_config();
-    if (config && config->mt_config.enable_mt_match) {
-        ret = linx_rule_match_mt_init(config->mt_config.num_match_threads);
+    linx_apd_config_t *apd_config = linx_apd_config_get();
+    if (apd_config && apd_config->mt_config.enable_mt_match) {
+        /* 优先使用事件处理器 */
+        linx_event_processor_config_t ep_config = {0};
+        ep_config.fetcher_thread_count = 1;  /* 主线程已经在获取事件，这里不需要额外的fetcher */
+        ep_config.matcher_thread_count = apd_config->mt_config.num_match_threads;
+        
+        ret = linx_event_processor_init(&ep_config);
         if (ret) {
-            LINX_LOG_ERROR("linx_rule_match_mt_init failed");
-            /* 非致命错误，回退到单线程模式 */
-            config->mt_config.enable_mt_match = false;
+            LINX_LOG_WARNING("linx_event_processor_init failed, falling back to rule_match_mt");
+            /* 回退到原有的多线程匹配 */
+            ret = linx_rule_match_mt_init(apd_config->mt_config.num_match_threads);
+            if (ret) {
+                LINX_LOG_ERROR("linx_rule_match_mt_init failed");
+                /* 非致命错误，回退到单线程模式 */
+                apd_config->mt_config.enable_mt_match = false;
+            } else {
+                LINX_LOG_INFO("Initialized fallback multi-thread rule matching with %d threads", 
+                             apd_config->mt_config.num_match_threads);
+            }
         } else {
-            LINX_LOG_INFO("Initialized multi-thread rule matching with %d threads", 
-                         config->mt_config.num_match_threads);
+            LINX_LOG_INFO("Initialized event processor with %d matcher threads", 
+                         ep_config.matcher_thread_count);
         }
     }
 
