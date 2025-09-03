@@ -5,6 +5,7 @@
 #include "rule_match_mt.h"
 #include "linx_rule_engine_set.h"
 #include "linx_hash_map.h"
+#include "linx_hash_map_thread_safe.h"
 #include "linx_log.h"
 #include "linx_process_cache.h"
 #include "linx_machine_status.h"
@@ -103,8 +104,8 @@ static void *rule_match_worker(void *arg, int *should_stop)
         ctx->proc_info = linx_process_cache_get((pid_t)task->event->pid);
     }
     
-    /* 更新当前线程的基地址 */
-    linx_hash_map_update_tables_base(ctx->tables, 5);
+    /* 更新当前线程的基地址 - 使用线程安全版本 */
+    linx_hash_map_update_tables_base_thread_safe(ctx->tables, 5);
     
     /* 遍历分配的规则范围 */
     for (size_t i = task->rule_start; i < task->rule_end && i < rule_set->size; i++) {

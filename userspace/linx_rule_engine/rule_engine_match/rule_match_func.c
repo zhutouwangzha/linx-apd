@@ -11,10 +11,11 @@
 #include "linx_event_table.h"
 #include "linx_name_value.h"
 #include "field_struct.h"
+#include "linx_hash_map_thread_safe.h"
 
 static void *matcher_get_value_ptr(field_result_t *field, linx_field_type_t *type, size_t *size)
 {
-    void *ptr = linx_hash_map_get_value_ptr(field, type);
+    void *ptr = linx_hash_map_get_value_ptr_thread_safe(field, type);
 
     if (ptr && field->type == LINX_FIELD_TYPE_STRUCT) {
         if (size) {
