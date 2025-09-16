@@ -56,7 +56,13 @@ static void *event_match_worker(void *arg, int *should_stop)
     linx_event_processor_task_t *task = (linx_event_processor_task_t *)arg;
     linx_event_processor_t *processor = task->processor;
     
-    linx_rule_set_match_rule();
+    /* 使用优化后的事件匹配接口 */
+    if (task->event) {
+        linx_rule_set_match_event(task->event);
+    } else {
+        /* 兼容性处理：如果没有具体事件，使用传统接口 */
+        linx_rule_set_match_rule();
+    }
 
     free(task);
     return NULL;
