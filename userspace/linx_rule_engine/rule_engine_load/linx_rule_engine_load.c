@@ -8,6 +8,7 @@
 #include "linx_rule_engine_load.h"
 #include "linx_rule_engine_set.h"
 #include "linx_rule_engine_ast.h"
+#include "linx_rule_analyzer.h"
 
 static int linx_rule_engine_add_rule_to_set(linx_yaml_node_t *root)
 {
@@ -69,8 +70,29 @@ static int linx_rule_engine_add_rule_to_set(linx_yaml_node_t *root)
             LINX_LOG_ERROR("rule %s output compile error", rule->name);
         }
 
+        /* 分析规则以确定事件分类 */
+        linx_rule_analysis_t analysis;
+        ret = linx_rule_analyze(rule, &analysis);
+        if (ret) {
+            LINX_LOG_WARN("rule analysis failed for rule %s, treating as generic", rule->name);
+            analysis.is_generic = true;
+            analysis.has_classification = false;
+        }
+        
         /* 转换成功则添加到列表中 */
-        ret = linx_rule_set_add(rule, match, output_match);
+        const linx_event_classification_t *classification = NULL;
+        if (analysis.has_classification && !analysis.is_generic) {
+            classification = &analysis.classification;
+            LINX_LOG_INFO("rule %s classified as source=%s, direction=%s, type=%u", 
+                         rule->name,
+                         linx_event_source_to_string(analysis.classification.source),
+                         linx_event_direction_to_string(analysis.classification.direction),
+                         analysis.classification.type);
+        } else {
+            LINX_LOG_INFO("rule %s added as generic rule", rule->name);
+        }
+        
+        ret = linx_rule_set_add(rule, match, output_match, classification);
         if (ret) {
             LINX_LOG_ERROR("add rule to rule set failed");
         }
@@ -146,6 +168,12 @@ int linx_rule_engine_load(const char *rules_file_path)
 
     ret = linx_rule_set_init();
     if (ret) {
+        return ret;
+    }
+    
+    ret = linx_rule_analyzer_init();
+    if (ret) {
+        linx_rule_set_deinit();
         return ret;
     }
 
