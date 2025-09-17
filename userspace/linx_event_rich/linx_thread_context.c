@@ -5,9 +5,7 @@
 
 #include "linx_thread_context.h"
 #include "linx_log.h"
-#include "field_table.h"
-#include "field_info.h"
-#include "uthash_ext.h"
+#include "linx_thread_base_addr.h"
 
 /* 全局线程特定数据键 */
 static pthread_key_t g_context_key;
@@ -21,27 +19,6 @@ static void thread_context_destructor(void *context)
     linx_thread_context_t *ctx = (linx_thread_context_t *)context;
     
     if (ctx) {
-        if (ctx->hash_map) {
-            /* 清理哈希表 */
-            field_table_t *current_table, *tmp_table;
-            
-            HASH_ITER(hh, ctx->hash_map->tables, current_table, tmp_table) {
-                HASH_DEL(ctx->hash_map->tables, current_table);
-                
-                /* 清理字段信息 */
-                field_info_t *current_field, *tmp_field;
-                HASH_ITER(hh, current_table->fields, current_field, tmp_field) {
-                    HASH_DEL(current_table->fields, current_field);
-                    free(current_field);
-                }
-                
-                free(current_table->table_name);
-                free(current_table);
-            }
-            
-            free(ctx->hash_map);
-        }
-        
         /* 清理事件结构中动态分配的内存 */
         if (ctx->evt.args) {
             free(ctx->evt.args);
@@ -88,6 +65,7 @@ void linx_thread_context_deinit(void)
 linx_thread_context_t *linx_thread_context_create(void)
 {
     linx_thread_context_t *ctx;
+    int ret;
     
     if (!g_context_key_created) {
         LINX_LOG_ERROR("Thread context system not initialized");
@@ -115,22 +93,18 @@ linx_thread_context_t *linx_thread_context_create(void)
     memset(&ctx->evt, 0, sizeof(event_t));
     ctx->evt.last_event_type = -1;
     
-    /* 创建独立的哈希表实例 */
-    ctx->hash_map = malloc(sizeof(linx_hash_map_t));
-    if (!ctx->hash_map) {
-        LINX_LOG_ERROR("Failed to allocate hash map for thread context");
+    /* 为当前线程创建base_addr上下文 */
+    ret = linx_thread_base_addr_create();
+    if (ret) {
+        LINX_LOG_ERROR("Failed to create thread base_addr context");
         free(ctx);
         return NULL;
     }
     
-    ctx->hash_map->tables = NULL;
-    ctx->hash_map->size = 0;
-    ctx->hash_map->capacity = 0;
-    
     /* 设置线程特定数据 */
     if (pthread_setspecific(g_context_key, ctx) != 0) {
         LINX_LOG_ERROR("Failed to set thread-specific data");
-        free(ctx->hash_map);
+        linx_thread_base_addr_destroy();
         free(ctx);
         return NULL;
     }
@@ -152,6 +126,9 @@ void linx_thread_context_destroy(void)
     
     ctx = pthread_getspecific(g_context_key);
     if (ctx) {
+        /* 清理线程特定的base_addr存储 */
+        linx_thread_base_addr_destroy();
+        
         pthread_setspecific(g_context_key, NULL);
         thread_context_destructor(ctx);
     }
@@ -177,13 +154,5 @@ event_t *linx_thread_context_get_event(void)
     return &ctx->evt;
 }
 
-linx_hash_map_t *linx_thread_context_get_hashmap(void)
-{
-    linx_thread_context_t *ctx = linx_thread_context_get();
-    
-    if (!ctx || !ctx->initialized) {
-        return NULL;
-    }
-    
-    return ctx->hash_map;
-}
+/* linx_thread_context_get_hashmap 函数已移除，
+ * 因为哈希表现在通过全局共享机制管理 */

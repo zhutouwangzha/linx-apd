@@ -18,7 +18,8 @@ LINX_EVENT_RICH_SRCS = linx_event_rich/linx_event_rich.c \
                        linx_event_rich/linx_thread_context.c \
                        linx_event_rich/linx_event_rich_mt.c
 
-LINX_HASH_MAP_SRCS = linx_hash_map/linx_hash_map.c
+LINX_HASH_MAP_SRCS = linx_hash_map/linx_hash_map.c \
+                     linx_hash_map/linx_thread_base_addr.c
 
 # 目标文件
 LINX_EVENT_RICH_OBJS = $(LINX_EVENT_RICH_SRCS:.c=.o)
@@ -32,9 +33,12 @@ LIBLINX_HASH_MAP = liblinx_hash_map.a
 EXAMPLE_SRCS = examples/multithread_example.c
 EXAMPLE_TARGET = multithread_example
 
-.PHONY: all clean libs example
+OPTIMIZED_EXAMPLE_SRCS = examples/optimized_multithread_example.c
+OPTIMIZED_EXAMPLE_TARGET = optimized_multithread_example
 
-all: libs example
+.PHONY: all clean libs example optimized
+
+all: libs example optimized
 
 # 构建库文件
 libs: $(LIBLINX_EVENT_RICH) $(LIBLINX_HASH_MAP)
@@ -51,6 +55,12 @@ example: $(EXAMPLE_TARGET)
 $(EXAMPLE_TARGET): $(EXAMPLE_SRCS) $(LIBLINX_EVENT_RICH) $(LIBLINX_HASH_MAP)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS)
 
+# 构建优化示例程序
+optimized: $(OPTIMIZED_EXAMPLE_TARGET)
+
+$(OPTIMIZED_EXAMPLE_TARGET): $(OPTIMIZED_EXAMPLE_SRCS) $(LIBLINX_EVENT_RICH) $(LIBLINX_HASH_MAP)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS)
+
 # 编译规则
 %.o: %.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
@@ -59,7 +69,7 @@ $(EXAMPLE_TARGET): $(EXAMPLE_SRCS) $(LIBLINX_EVENT_RICH) $(LIBLINX_HASH_MAP)
 clean:
 	rm -f $(LINX_EVENT_RICH_OBJS) $(LINX_HASH_MAP_OBJS)
 	rm -f $(LIBLINX_EVENT_RICH) $(LIBLINX_HASH_MAP)
-	rm -f $(EXAMPLE_TARGET)
+	rm -f $(EXAMPLE_TARGET) $(OPTIMIZED_EXAMPLE_TARGET)
 
 # 安装头文件（可选）
 install-headers:

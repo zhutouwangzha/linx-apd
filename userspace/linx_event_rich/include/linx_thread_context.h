@@ -6,7 +6,8 @@
 #include "linx_hash_map.h"
 
 /**
- * 线程上下文结构，包含每个线程独立的数据
+ * 简化的线程上下文结构，只包含必要的线程独立数据
+ * base_addr 通过专门的 linx_thread_base_addr 机制管理
  */
 typedef struct {
     /* 线程ID */
@@ -15,14 +16,8 @@ typedef struct {
     /* 每个线程独立的事件结构 */
     event_t evt;
     
-    /* 每个线程独立的哈希表实例 */
-    linx_hash_map_t *hash_map;
-    
     /* 线程状态标识 */
     bool initialized;
-    
-    /* 线程特定数据键值 */
-    pthread_key_t context_key;
 } linx_thread_context_t;
 
 /**
@@ -59,10 +54,6 @@ linx_thread_context_t *linx_thread_context_get(void);
  */
 event_t *linx_thread_context_get_event(void);
 
-/**
- * 获取当前线程的哈希表
- * @return linx_hash_map_t指针，NULL表示未初始化
- */
-linx_hash_map_t *linx_thread_context_get_hashmap(void);
+/* 哈希表现在通过全局共享机制管理，不再需要线程特定的哈希表实例 */
 
 #endif /* __LINX_THREAD_CONTEXT_H__ */

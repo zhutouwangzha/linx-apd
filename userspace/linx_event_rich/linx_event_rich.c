@@ -546,22 +546,40 @@ int linx_event_rich_init(void)
 {
     int ret;
     
+    /* 初始化全局共享哈希表系统 */
+    ret = linx_hash_map_init();
+    if (ret) {
+        LINX_LOG_ERROR("Failed to initialize hash map system");
+        return ret;
+    }
+    
     /* 初始化线程上下文系统 */
     ret = linx_thread_context_init();
     if (ret) {
         LINX_LOG_ERROR("Failed to initialize thread context system");
+        linx_hash_map_deinit();
         return ret;
     }
     
     /* 为当前线程创建上下文 */
     if (!linx_thread_context_create()) {
         LINX_LOG_ERROR("Failed to create thread context for main thread");
+        linx_thread_context_deinit();
+        linx_hash_map_deinit();
         return -1;
     }
     
+    /* 绑定字段映射（只需要执行一次，所有线程共享） */
     ret = linx_event_rich_bind_field();
+    if (ret) {
+        LINX_LOG_ERROR("Failed to bind field mappings");
+        linx_thread_context_destroy();
+        linx_thread_context_deinit();
+        linx_hash_map_deinit();
+        return ret;
+    }
 
-    return ret;
+    return 0;
 }
 
 void linx_event_rich_deinit(void)
@@ -575,6 +593,9 @@ void linx_event_rich_deinit(void)
     /* 清理线程上下文 */
     linx_thread_context_destroy();
     linx_thread_context_deinit();
+    
+    /* 清理全局共享哈希表系统 */
+    linx_hash_map_deinit();
 }
 
 int linx_event_rich(linx_event_t *event)
