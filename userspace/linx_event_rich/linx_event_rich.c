@@ -11,18 +11,23 @@
 #include "linx_event_get.h"
 #include "linx_hash_map.h"
 #include "linx_log.h"
+#include "linx_thread_context.h"
 
 #include "linx_event_table.h"
 #include "linx_process_cache.h"
 #include "linx_machine_status.h"
 #include "linx_fd_info.h"
 
-static event_t evt = {0};
-
 static int update_field_base(linx_event_t *event, int64_t fd)
 {
+    event_t *evt = linx_thread_context_get_event();
+    if (!evt) {
+        LINX_LOG_ERROR("Thread context not initialized");
+        return -1;
+    }
+    
     field_update_table_t tables[] = {
-        {"evt", &evt},
+        {"evt", evt},
         {"fd", (void *)linx_process_cache_get_fd((pid_t)event->pid, fd)},
         {"proc", (void *)linx_process_cache_get((pid_t)event->pid)},
         {"user", (void *)linx_machine_status_get_user()},
@@ -58,15 +63,17 @@ static int bind_field_evt(void)
     return ret;
 }
 
-static int linx_event_rich_bind_field(void)
+int linx_event_rich_bind_field(void)
 {
     int ret = bind_field_evt();
     return ret;
 }
 
-static void rich_event_clean(linx_event_type_t type)
+void rich_event_clean(linx_event_type_t type)
 {
-    if (type < 0 || type >= LINX_EVENT_TYPE_MAX) {
+    event_t *evt = linx_thread_context_get_event();
+    
+    if (!evt || type < 0 || type >= LINX_EVENT_TYPE_MAX) {
         return;
     }
 
@@ -74,11 +81,11 @@ static void rich_event_clean(linx_event_type_t type)
         switch (g_linx_event_table[type].params[i].type) {
         case LINX_FIELD_TYPE_UID:
         case LINX_FIELD_TYPE_PID:
-            free(evt.arg[i].data);
+            free(evt->arg[i].data);
             /* fall through */
         default:
-            evt.arg[i].data = evt.rawarg[i].data = NULL;
-            evt.arg[i].size = evt.rawarg[i].size = 0;
+            evt->arg[i].data = evt->rawarg[i].data = NULL;
+            evt->arg[i].size = evt->rawarg[i].size = 0;
             break;
         }
     }
@@ -86,16 +93,22 @@ static void rich_event_clean(linx_event_type_t type)
 
 static void rich_event_args(linx_event_t *event)
 {
+    event_t *evt = linx_thread_context_get_event();
     uint64_t size = 0;
     uint64_t args_size = event->size - LINX_EVENT_HEADER_SIZE;
     void *base = (void *)event + LINX_EVENT_HEADER_SIZE;
 
-    evt.args = realloc(evt.args, args_size);
-    memcpy(evt.args, base, args_size);
+    if (!evt) {
+        LINX_LOG_ERROR("Thread context not initialized");
+        return;
+    }
+
+    evt->args = realloc(evt->args, args_size);
+    memcpy(evt->args, base, args_size);
 
     for (uint64_t i = 0; i < args_size; ++i) {
-        if (evt.args[i] == '\0') {
-            evt.args[i] = ' ';
+        if (evt->args[i] == '\0') {
+            evt->args[i] = ' ';
         }
     }
 
@@ -104,32 +117,32 @@ static void rich_event_args(linx_event_t *event)
         case LINX_FIELD_TYPE_UID:
             struct passwd *pw = getpwuid((uid_t)(*(uint32_t *)(base + size)));
             if (pw) {
-                evt.arg[i].data = evt.rawarg[i].data = 
+                evt->arg[i].data = evt->rawarg[i].data = 
                     strdup(pw->pw_name);
             } else {
-                evt.arg[i].data = evt.rawarg[i].data = 
+                evt->arg[i].data = evt->rawarg[i].data = 
                     strdup("unknown");
             }
 
-            evt.arg[i].size = evt.rawarg[i].size = 
-                strlen(evt.arg[i].data);
+            evt->arg[i].size = evt->rawarg[i].size = 
+                strlen(evt->arg[i].data);
             break;
         case LINX_FIELD_TYPE_PID:
             linx_process_info_t *info = linx_process_cache_get((pid_t)(*(int64_t *)(base + size)));
             if (info) {
-                evt.arg[i].data = evt.rawarg[i].data = 
+                evt->arg[i].data = evt->rawarg[i].data = 
                     strdup(info->name);
             } else {
-                evt.arg[i].data = evt.rawarg[i].data = 
+                evt->arg[i].data = evt->rawarg[i].data = 
                     strdup("unknown");
             }
 
-            evt.arg[i].size = evt.rawarg[i].size = 
-                strlen(evt.arg[i].data);
+            evt->arg[i].size = evt->rawarg[i].size = 
+                strlen(evt->arg[i].data);
             break;
         default:
-            evt.arg[i].data = evt.rawarg[i].data = base + size;
-            evt.arg[i].size = evt.rawarg[i].size = event->params_size[i];
+            evt->arg[i].data = evt->rawarg[i].data = base + size;
+            evt->arg[i].size = evt->rawarg[i].size = event->params_size[i];
             break;
         }
 
@@ -380,8 +393,14 @@ static void infer_sendto_fdinfo(linx_event_t *event)
 
 static void rich_store_event(linx_event_t *event)
 {
+    event_t *evt = linx_thread_context_get_event();
     pid_t pid = (pid_t)event->pid;
     int64_t fd = -1;
+
+    if (!evt) {
+        LINX_LOG_ERROR("Thread context not initialized");
+        return;
+    }
 
     switch (event->type) {
     case LINX_EVENT_TYPE_READ_E:
@@ -398,7 +417,7 @@ static void rich_store_event(linx_event_t *event)
         linx_process_cache_get_fd(pid, fd);
     }
 
-    memcpy(evt.last_event, event, event->size);
+    memcpy(evt->last_event, event, event->size);
 }
 
 /**
@@ -479,15 +498,21 @@ static void rich_execve_exit(linx_event_t *event)
 
 static void rich_rw_exit(linx_event_t *event)
 {
+    event_t *evt = linx_thread_context_get_event();
     int64_t fd;
     linx_fd_info_t *fd_info;
+
+    if (!evt) {
+        LINX_LOG_ERROR("Thread context not initialized");
+        return;
+    }
 
     // res = event->res;
 
     switch (event->type) {
     case LINX_EVENT_TYPE_RECVFROM_X:
     case LINX_EVENT_TYPE_SENDTO_X:
-        fd = *(int64_t *)linx_event_get_param((linx_event_t *)evt.last_event, 0);
+        fd = *(int64_t *)linx_event_get_param((linx_event_t *)evt->last_event, 0);
         break;
     default:
         fd = *(int64_t *)linx_event_get_param(event, 2);
@@ -519,16 +544,58 @@ static int64_t rich_dup_exit(linx_event_t *event)
 
 int linx_event_rich_init(void)
 {
-    int ret = linx_event_rich_bind_field();
+    int ret;
+    
+    /* 初始化全局共享哈希表系统 */
+    ret = linx_hash_map_init();
+    if (ret) {
+        LINX_LOG_ERROR("Failed to initialize hash map system");
+        return ret;
+    }
+    
+    /* 初始化线程上下文系统 */
+    ret = linx_thread_context_init();
+    if (ret) {
+        LINX_LOG_ERROR("Failed to initialize thread context system");
+        linx_hash_map_deinit();
+        return ret;
+    }
+    
+    /* 为当前线程创建上下文 */
+    if (!linx_thread_context_create()) {
+        LINX_LOG_ERROR("Failed to create thread context for main thread");
+        linx_thread_context_deinit();
+        linx_hash_map_deinit();
+        return -1;
+    }
+    
+    /* 绑定字段映射（只需要执行一次，所有线程共享） */
+    ret = linx_event_rich_bind_field();
+    if (ret) {
+        LINX_LOG_ERROR("Failed to bind field mappings");
+        linx_thread_context_destroy();
+        linx_thread_context_deinit();
+        linx_hash_map_deinit();
+        return ret;
+    }
 
-    evt.last_event_type = -1;
-
-    return ret;
+    return 0;
 }
 
 void linx_event_rich_deinit(void)
 {
-    rich_event_clean(evt.last_event_type);
+    event_t *evt = linx_thread_context_get_event();
+    
+    if (evt) {
+        rich_event_clean(evt->last_event_type);
+    }
+    
+    /* 清理线程上下文 */
+    linx_thread_context_destroy();
+    linx_thread_context_deinit();
+    
+    /* 清理全局共享哈希表系统 */
+    linx_hash_map_deinit();
 }
 
 int linx_event_rich(linx_event_t *event)
@@ -539,32 +606,38 @@ int linx_event_rich(linx_event_t *event)
      * 同步更新到应用层保存的结构体中
     */
 
+    event_t *evt = linx_thread_context_get_event();
+    if (!evt) {
+        LINX_LOG_ERROR("Thread context not initialized");
+        return -1;
+    }
+
     /* 更新 evt 结构体相关内容 */
     int64_t fd = -1;
     uint64_t ns = event->time;
     uint64_t remaining_ns = ns % 1000000000;
     time_t seconds = ns / 1000000000;
     struct tm *timeinfo = localtime(&seconds);
-    size_t len = strftime(evt.time, sizeof(evt.time), "%Y-%m-%d %H:%M:%S", timeinfo);
+    size_t len = strftime(evt->time, sizeof(evt->time), "%Y-%m-%d %H:%M:%S", timeinfo);
     int ret;
 
-    rich_event_clean(evt.last_event_type);
-    evt.last_event_type = event->type;
+    rich_event_clean(evt->last_event_type);
+    evt->last_event_type = event->type;
 
-    snprintf(evt.time + len, sizeof(evt.time) - len, ".%09lu", remaining_ns);
+    snprintf(evt->time + len, sizeof(evt->time) - len, ".%09lu", remaining_ns);
 
-    evt.num = event->type;
+    evt->num = event->type;
     event->type % 2 ? 
-        strcpy(evt.dir, "<") : 
-        strcpy(evt.dir, ">");
-    evt.type = (char *)g_linx_event_table[event->type].name;
-    evt.rawres = (int64_t)event->res;
-    if (evt.rawres == 0) {
-        evt.failed = false;
-        strcpy(evt.res, "SUCCESS");
+        strcpy(evt->dir, "<") : 
+        strcpy(evt->dir, ">");
+    evt->type = (char *)g_linx_event_table[event->type].name;
+    evt->rawres = (int64_t)event->res;
+    if (evt->rawres == 0) {
+        evt->failed = false;
+        strcpy(evt->res, "SUCCESS");
     } else {
-        evt.failed = true;
-        strcpy(evt.res, "ERRNO");
+        evt->failed = true;
+        strcpy(evt->res, "ERRNO");
     }
 
     /**
@@ -613,5 +686,5 @@ int linx_event_rich(linx_event_t *event)
 
 event_t *linx_event_rich_get(void)
 {
-    return &evt;
+    return linx_thread_context_get_event();
 }

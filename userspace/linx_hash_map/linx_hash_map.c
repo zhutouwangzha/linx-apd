@@ -5,8 +5,11 @@
 #include "linx_event_table.h"
 #include "linx_log.h"
 #include "field_struct.h"
+#include "linx_thread_base_addr.h"
 
-static linx_hash_map_t *s_linx_hash_map = NULL;
+/* 全局共享的哈希表实例 - 只存储字段映射信息 */
+static linx_hash_map_t *g_shared_hash_map = NULL;
+static pthread_mutex_t g_hash_map_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static void destroy_field_info(field_info_t *fields)
 {
@@ -35,60 +38,109 @@ static void destroy_field_table(field_table_t *table)
 
 int linx_hash_map_init(void)
 {
-    if (s_linx_hash_map) {
+    int ret;
+    
+    pthread_mutex_lock(&g_hash_map_mutex);
+    
+    if (g_shared_hash_map) {
+        pthread_mutex_unlock(&g_hash_map_mutex);
+        return 0;
+    }
+    
+    /* 初始化线程特定base_addr系统 */
+    ret = linx_thread_base_addr_init();
+    if (ret) {
+        LINX_LOG_ERROR("Failed to initialize thread base_addr system");
+        pthread_mutex_unlock(&g_hash_map_mutex);
         return -1;
     }
-
-    s_linx_hash_map = (linx_hash_map_t *)malloc(sizeof(linx_hash_map_t));
-    if (s_linx_hash_map == NULL) {
+    
+    /* 创建全局共享的哈希表实例 */
+    g_shared_hash_map = (linx_hash_map_t *)malloc(sizeof(linx_hash_map_t));
+    if (g_shared_hash_map == NULL) {
+        linx_thread_base_addr_deinit();
+        pthread_mutex_unlock(&g_hash_map_mutex);
         return -1;
     }
-
-    s_linx_hash_map->tables = NULL;
-
+    
+    g_shared_hash_map->tables = NULL;
+    g_shared_hash_map->size = 0;
+    g_shared_hash_map->capacity = 0;
+    
+    pthread_mutex_unlock(&g_hash_map_mutex);
+    
+    LINX_LOG_INFO("Hash map system initialized with shared field mappings");
     return 0;
 }
 
 void linx_hash_map_deinit(void)
 {
     field_table_t *current_table, *tmp_table;
-
-    if (s_linx_hash_map == NULL) {
+    
+    pthread_mutex_lock(&g_hash_map_mutex);
+    
+    if (g_shared_hash_map == NULL) {
+        pthread_mutex_unlock(&g_hash_map_mutex);
         return;
     }
-
-    HASH_ITER(hh, s_linx_hash_map->tables, current_table, tmp_table) {
-        HASH_DEL(s_linx_hash_map->tables, current_table);
+    
+    /* 清理共享的字段映射表 */
+    HASH_ITER(hh, g_shared_hash_map->tables, current_table, tmp_table) {
+        HASH_DEL(g_shared_hash_map->tables, current_table);
         destroy_field_table(current_table);
     }
-
-    free(s_linx_hash_map);
-    s_linx_hash_map = NULL;
+    
+    free(g_shared_hash_map);
+    g_shared_hash_map = NULL;
+    
+    pthread_mutex_unlock(&g_hash_map_mutex);
+    
+    /* 清理线程特定base_addr系统 */
+    linx_thread_base_addr_deinit();
+    
+    LINX_LOG_INFO("Hash map system deinitialized");
 }
 
 int linx_hash_map_create_table(const char *table_name, void *base_addr)
 {
     field_table_t *existing_table, *new_table;
 
-    if (s_linx_hash_map == NULL || table_name == NULL) {
+    if (g_shared_hash_map == NULL || table_name == NULL) {
         return -1;
     }
 
-    HASH_FIND_STR(s_linx_hash_map->tables, table_name, existing_table);
+    pthread_mutex_lock(&g_hash_map_mutex);
+    
+    /* 检查共享映射表中是否已存在 */
+    HASH_FIND_STR(g_shared_hash_map->tables, table_name, existing_table);
     if (existing_table) {
-        return -1;
+        pthread_mutex_unlock(&g_hash_map_mutex);
+        /* 表已存在，只需设置当前线程的base_addr */
+        if (base_addr) {
+            return linx_thread_base_addr_set(table_name, base_addr);
+        }
+        return 0;
     }
 
+    /* 创建新的字段映射表 */
     new_table = malloc(sizeof(field_table_t));
     if (new_table == NULL) {
+        pthread_mutex_unlock(&g_hash_map_mutex);
         return -1;
     }
 
     new_table->table_name = strdup(table_name);
-    new_table->base_addr = base_addr;   /* 可以为NULL,表示延迟绑定 */
+    new_table->base_addr = NULL;  /* 共享表中不存储base_addr */
     new_table->fields = NULL;
 
-    HASH_ADD_STR(s_linx_hash_map->tables, table_name, new_table);
+    HASH_ADD_STR(g_shared_hash_map->tables, table_name, new_table);
+    
+    pthread_mutex_unlock(&g_hash_map_mutex);
+    
+    /* 设置当前线程的base_addr */
+    if (base_addr) {
+        return linx_thread_base_addr_set(table_name, base_addr);
+    }
 
     return 0;
 }
@@ -97,17 +149,23 @@ int linx_hash_map_remove_table(const char *table_name)
 {
     field_table_t *table;
 
-    if (!s_linx_hash_map || !table_name) {
+    if (!g_shared_hash_map || !table_name) {
         return -1;
     }
 
-    HASH_FIND_STR(s_linx_hash_map->tables, table_name, table);
+    pthread_mutex_lock(&g_hash_map_mutex);
+    
+    HASH_FIND_STR(g_shared_hash_map->tables, table_name, table);
     if (!table) {
+        pthread_mutex_unlock(&g_hash_map_mutex);
         return -1;
     }
 
-    HASH_DEL(s_linx_hash_map->tables, table);
-    s_linx_hash_map->size--;
+    HASH_DEL(g_shared_hash_map->tables, table);
+    destroy_field_table(table);
+    g_shared_hash_map->size--;
+    
+    pthread_mutex_unlock(&g_hash_map_mutex);
 
     return 0;
 }
@@ -117,31 +175,38 @@ int linx_hash_map_add_field(const char *table_name, const char *field_name, size
     field_table_t *table;
     field_info_t *existing_field, *new_field;
 
-    if (!s_linx_hash_map || !table_name || !field_name) {
+    if (!g_shared_hash_map || !table_name || !field_name) {
         return -1;
     }
 
-    HASH_FIND_STR(s_linx_hash_map->tables, table_name, table);
+    pthread_mutex_lock(&g_hash_map_mutex);
+    
+    HASH_FIND_STR(g_shared_hash_map->tables, table_name, table);
     if (!table) {
+        pthread_mutex_unlock(&g_hash_map_mutex);
         return -1;
     }
 
     HASH_FIND_STR(table->fields, field_name, existing_field);
     if (existing_field != NULL) {
+        pthread_mutex_unlock(&g_hash_map_mutex);
         return -1;
     }
 
     new_field = malloc(sizeof(field_info_t));
     if (new_field == NULL) {
+        pthread_mutex_unlock(&g_hash_map_mutex);
         return -1;
     }
 
-    new_field->key = (char *)field_name;
+    new_field->key = strdup(field_name);
     new_field->offset = offset;
     new_field->type = type;
     new_field->size = size;
 
     HASH_ADD_STR(table->fields, key, new_field);
+    
+    pthread_mutex_unlock(&g_hash_map_mutex);
 
     return 0;
 }
@@ -150,7 +215,7 @@ int linx_hash_map_add_field_batch(const char *table_name, const field_mapping_t 
 {
     int ret;
 
-    if (!s_linx_hash_map || !table_name || !mappings) {
+    if (!g_shared_hash_map || !table_name || !mappings) {
         return -1;
     }
 
@@ -177,11 +242,12 @@ field_result_t linx_hash_map_get_field(const char *table_name, const char *field
 
     result.found = false;
 
-    if (!s_linx_hash_map || !table_name || !field_name) {
+    if (!g_shared_hash_map || !table_name || !field_name) {
         return result;
     }
 
-    HASH_FIND_STR(s_linx_hash_map->tables, table_name, table);
+    /* 读取共享字段映射，不需要加锁（只读操作） */
+    HASH_FIND_STR(g_shared_hash_map->tables, table_name, table);
     if (!table) {
         return result;
     }
@@ -243,7 +309,8 @@ void *linx_hash_map_get_value_ptr(field_result_t *field, linx_field_type_t *type
         return NULL;
     }
 
-    base_addr = linx_hash_map_get_table_base(field->table_name);
+    /* 从线程特定存储获取base_addr */
+    base_addr = linx_thread_base_addr_get(field->table_name);
     if (base_addr == NULL) {
         return NULL;
     }
@@ -289,55 +356,32 @@ void *linx_hash_map_get_value_ptr(field_result_t *field, linx_field_type_t *type
 
 int linx_hash_map_update_table_base(const char *table_name, void *base_addr)
 {
-    field_table_t *table;
-
-    if (!s_linx_hash_map || !table_name) {
+    if (!table_name) {
         return -1;
     }
 
-    HASH_FIND_STR(s_linx_hash_map->tables, table_name, table);
-    if (!table) {
-        return -1;
-    }
-
-    table->base_addr = base_addr;
-
-    return 0;
+    /* 直接设置到线程特定存储 */
+    return linx_thread_base_addr_set(table_name, base_addr);
 }
 
 int linx_hash_map_update_tables_base(field_update_table_t *tables, size_t num_tables)
 {
-    int ret = 0;
-
-    if (!s_linx_hash_map || !tables) {
+    if (!tables) {
         return -1;
     }
 
-    for (size_t i = 0; i < num_tables; i++) {
-        ret = linx_hash_map_update_table_base(tables[i].table_name, tables[i].base_addr);
-        if (ret) {
-            ret = i;
-            LINX_LOG_WARNING("update %d[%s] hash map table failed!", i, tables[i].table_name);
-        }
-    }
-
-    return ret;
+    /* 使用批量设置函数 */
+    return linx_thread_base_addr_set_batch(tables, num_tables);
 }
 
 void *linx_hash_map_get_table_base(const char *table_name)
 {
-    field_table_t *table;
-
-    if (!s_linx_hash_map || !table_name) {
+    if (!table_name) {
         return NULL;
     }
 
-    HASH_FIND_STR(s_linx_hash_map->tables, table_name, table);
-    if (!table) {
-        return NULL;
-    }
-
-    return table->base_addr;
+    /* 从线程特定存储获取base_addr */
+    return linx_thread_base_addr_get(table_name);
 }
 
 int linx_hash_map_list_tables(char ***table_names, size_t *num_tables)
@@ -347,11 +391,12 @@ int linx_hash_map_list_tables(char ***table_names, size_t *num_tables)
     size_t table_count = 0;
     size_t index = 0;
 
-    if (!s_linx_hash_map || !table_names || !num_tables) {
+    if (!g_shared_hash_map || !table_names || !num_tables) {
         return -1;
     }
 
-    HASH_ITER(hh, s_linx_hash_map->tables, current, tmp) {
+    /* 使用共享表进行计数，不需要加锁（只读操作） */
+    HASH_ITER(hh, g_shared_hash_map->tables, current, tmp) {
         table_count++;
     }
 
@@ -366,7 +411,7 @@ int linx_hash_map_list_tables(char ***table_names, size_t *num_tables)
         return -1;
     }
 
-    HASH_ITER(hh, s_linx_hash_map->tables, current, tmp) {
+    HASH_ITER(hh, g_shared_hash_map->tables, current, tmp) {
         names[index] = strdup(current->table_name);
         if (!names[index]) {
             for (size_t i = 0; i < index; i++) {
