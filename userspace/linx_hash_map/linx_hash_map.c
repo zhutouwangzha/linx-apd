@@ -5,8 +5,7 @@
 #include "linx_event_table.h"
 #include "linx_log.h"
 #include "field_struct.h"
-
-static linx_hash_map_t *s_linx_hash_map = NULL;
+#include "linx_thread_context.h"
 
 static void destroy_field_info(field_info_t *fields)
 {
@@ -35,46 +34,27 @@ static void destroy_field_table(field_table_t *table)
 
 int linx_hash_map_init(void)
 {
-    if (s_linx_hash_map) {
-        return -1;
-    }
-
-    s_linx_hash_map = (linx_hash_map_t *)malloc(sizeof(linx_hash_map_t));
-    if (s_linx_hash_map == NULL) {
-        return -1;
-    }
-
-    s_linx_hash_map->tables = NULL;
-
+    /* 这个函数现在不再需要，因为每个线程有自己的hash_map实例 */
+    /* 保留为兼容性，实际初始化在线程上下文中完成 */
     return 0;
 }
 
 void linx_hash_map_deinit(void)
 {
-    field_table_t *current_table, *tmp_table;
-
-    if (s_linx_hash_map == NULL) {
-        return;
-    }
-
-    HASH_ITER(hh, s_linx_hash_map->tables, current_table, tmp_table) {
-        HASH_DEL(s_linx_hash_map->tables, current_table);
-        destroy_field_table(current_table);
-    }
-
-    free(s_linx_hash_map);
-    s_linx_hash_map = NULL;
+    /* 这个函数现在不再需要，因为每个线程有自己的hash_map实例 */
+    /* 保留为兼容性，实际清理在线程上下文中完成 */
 }
 
 int linx_hash_map_create_table(const char *table_name, void *base_addr)
 {
+    linx_hash_map_t *hash_map = linx_thread_context_get_hashmap();
     field_table_t *existing_table, *new_table;
 
-    if (s_linx_hash_map == NULL || table_name == NULL) {
+    if (hash_map == NULL || table_name == NULL) {
         return -1;
     }
 
-    HASH_FIND_STR(s_linx_hash_map->tables, table_name, existing_table);
+    HASH_FIND_STR(hash_map->tables, table_name, existing_table);
     if (existing_table) {
         return -1;
     }
@@ -88,40 +68,42 @@ int linx_hash_map_create_table(const char *table_name, void *base_addr)
     new_table->base_addr = base_addr;   /* 可以为NULL,表示延迟绑定 */
     new_table->fields = NULL;
 
-    HASH_ADD_STR(s_linx_hash_map->tables, table_name, new_table);
+    HASH_ADD_STR(hash_map->tables, table_name, new_table);
 
     return 0;
 }
 
 int linx_hash_map_remove_table(const char *table_name)
 {
+    linx_hash_map_t *hash_map = linx_thread_context_get_hashmap();
     field_table_t *table;
 
-    if (!s_linx_hash_map || !table_name) {
+    if (!hash_map || !table_name) {
         return -1;
     }
 
-    HASH_FIND_STR(s_linx_hash_map->tables, table_name, table);
+    HASH_FIND_STR(hash_map->tables, table_name, table);
     if (!table) {
         return -1;
     }
 
-    HASH_DEL(s_linx_hash_map->tables, table);
-    s_linx_hash_map->size--;
+    HASH_DEL(hash_map->tables, table);
+    hash_map->size--;
 
     return 0;
 }
 
 int linx_hash_map_add_field(const char *table_name, const char *field_name, size_t offset, size_t size, linx_field_type_t type)
 {
+    linx_hash_map_t *hash_map = linx_thread_context_get_hashmap();
     field_table_t *table;
     field_info_t *existing_field, *new_field;
 
-    if (!s_linx_hash_map || !table_name || !field_name) {
+    if (!hash_map || !table_name || !field_name) {
         return -1;
     }
 
-    HASH_FIND_STR(s_linx_hash_map->tables, table_name, table);
+    HASH_FIND_STR(hash_map->tables, table_name, table);
     if (!table) {
         return -1;
     }
@@ -150,7 +132,7 @@ int linx_hash_map_add_field_batch(const char *table_name, const field_mapping_t 
 {
     int ret;
 
-    if (!s_linx_hash_map || !table_name || !mappings) {
+    if (!linx_thread_context_get_hashmap() || !table_name || !mappings) {
         return -1;
     }
 
@@ -171,17 +153,18 @@ int linx_hash_map_add_field_batch(const char *table_name, const field_mapping_t 
 
 field_result_t linx_hash_map_get_field(const char *table_name, const char *field_name)
 {
+    linx_hash_map_t *hash_map = linx_thread_context_get_hashmap();
     field_table_t *table;
     field_info_t *field;
     field_result_t result = {0};
 
     result.found = false;
 
-    if (!s_linx_hash_map || !table_name || !field_name) {
+    if (!hash_map || !table_name || !field_name) {
         return result;
     }
 
-    HASH_FIND_STR(s_linx_hash_map->tables, table_name, table);
+    HASH_FIND_STR(hash_map->tables, table_name, table);
     if (!table) {
         return result;
     }
@@ -289,13 +272,14 @@ void *linx_hash_map_get_value_ptr(field_result_t *field, linx_field_type_t *type
 
 int linx_hash_map_update_table_base(const char *table_name, void *base_addr)
 {
+    linx_hash_map_t *hash_map = linx_thread_context_get_hashmap();
     field_table_t *table;
 
-    if (!s_linx_hash_map || !table_name) {
+    if (!hash_map || !table_name) {
         return -1;
     }
 
-    HASH_FIND_STR(s_linx_hash_map->tables, table_name, table);
+    HASH_FIND_STR(hash_map->tables, table_name, table);
     if (!table) {
         return -1;
     }
@@ -309,7 +293,7 @@ int linx_hash_map_update_tables_base(field_update_table_t *tables, size_t num_ta
 {
     int ret = 0;
 
-    if (!s_linx_hash_map || !tables) {
+    if (!linx_thread_context_get_hashmap() || !tables) {
         return -1;
     }
 
@@ -326,13 +310,14 @@ int linx_hash_map_update_tables_base(field_update_table_t *tables, size_t num_ta
 
 void *linx_hash_map_get_table_base(const char *table_name)
 {
+    linx_hash_map_t *hash_map = linx_thread_context_get_hashmap();
     field_table_t *table;
 
-    if (!s_linx_hash_map || !table_name) {
+    if (!hash_map || !table_name) {
         return NULL;
     }
 
-    HASH_FIND_STR(s_linx_hash_map->tables, table_name, table);
+    HASH_FIND_STR(hash_map->tables, table_name, table);
     if (!table) {
         return NULL;
     }
@@ -342,16 +327,17 @@ void *linx_hash_map_get_table_base(const char *table_name)
 
 int linx_hash_map_list_tables(char ***table_names, size_t *num_tables)
 {
+    linx_hash_map_t *hash_map = linx_thread_context_get_hashmap();
     field_table_t *current, *tmp;
     char **names;
     size_t table_count = 0;
     size_t index = 0;
 
-    if (!s_linx_hash_map || !table_names || !num_tables) {
+    if (!hash_map || !table_names || !num_tables) {
         return -1;
     }
 
-    HASH_ITER(hh, s_linx_hash_map->tables, current, tmp) {
+    HASH_ITER(hh, hash_map->tables, current, tmp) {
         table_count++;
     }
 
@@ -366,7 +352,7 @@ int linx_hash_map_list_tables(char ***table_names, size_t *num_tables)
         return -1;
     }
 
-    HASH_ITER(hh, s_linx_hash_map->tables, current, tmp) {
+    HASH_ITER(hh, hash_map->tables, current, tmp) {
         names[index] = strdup(current->table_name);
         if (!names[index]) {
             for (size_t i = 0; i < index; i++) {

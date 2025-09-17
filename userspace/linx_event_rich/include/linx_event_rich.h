@@ -38,4 +38,9 @@ int linx_event_rich(linx_event_t *event);
 
 event_t *linx_event_rich_get(void);
 
+/* 多线程支持函数 */
+int linx_event_rich_bind_field(void);
+
+void rich_event_clean(linx_event_type_t type);
+
 #endif /* __LINX_EVENT_RICH_H__ */
